@@ -31,34 +31,38 @@ let featuredCities: CityCount[] = [];
 let categories: Category[] = [];
 
 if (db) {
-  const [listingsResult, citiesResult, catsResult] = await Promise.all([
-    db.prepare(`
-      SELECT p.slug, p.name, p.city, p.country, p.halal_certified,
-             c.name AS category_name
-      FROM places p
-      LEFT JOIN categories c ON p.category_id = c.id
-      WHERE p.published = 1
-      ORDER BY p.created_at DESC
-      LIMIT 12
-    `).all<Place>(),
+  try {
+    const [listingsResult, citiesResult, catsResult] = await Promise.all([
+      db.prepare(`
+        SELECT p.slug, p.name, p.city, p.country, p.halal_certified,
+               c.name AS category_name
+        FROM places p
+        LEFT JOIN categories c ON p.category_id = c.id
+        WHERE p.published = 1
+        ORDER BY p.created_at DESC
+        LIMIT 12
+      `).all<Place>(),
 
-    db.prepare(`
-      SELECT city, country, COUNT(*) AS count
-      FROM places
-      WHERE published = 1
-      GROUP BY city, country
-      ORDER BY count DESC
-      LIMIT 6
-    `).all<CityCount>(),
+      db.prepare(`
+        SELECT city, country, COUNT(*) AS count
+        FROM places
+        WHERE published = 1
+        GROUP BY city, country
+        ORDER BY count DESC
+        LIMIT 6
+      `).all<CityCount>(),
 
-    db.prepare(`
-      SELECT id, slug, name FROM categories ORDER BY name
-    `).all<Category>(),
-  ]);
+      db.prepare(`
+        SELECT id, slug, name FROM categories ORDER BY name
+      `).all<Category>(),
+    ]);
 
-  recentListings = listingsResult.results;
-  featuredCities = citiesResult.results;
-  categories = catsResult.results;
+    recentListings = listingsResult.results;
+    featuredCities = citiesResult.results;
+    categories = catsResult.results;
+  } catch (err) {
+    console.error('[index] DB query failed:', err);
+  }
 }
 ---
 

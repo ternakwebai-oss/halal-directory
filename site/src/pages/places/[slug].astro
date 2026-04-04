@@ -231,16 +231,20 @@ const breadcrumbJson = JSON.stringify(breadcrumbSchema);
             </>
           )}
 
-          {place.website && (
-            <>
-              <dt>Website</dt>
-              <dd>
-                <a href={place.website} target="_blank" rel="noopener noreferrer">
-                  {new URL(place.website).hostname}
-                </a>
-              </dd>
-            </>
-          )}
+          {place.website && (() => {
+            let hostname = place.website;
+            try { hostname = new URL(place.website).hostname; } catch { /* malformed URL */ }
+            return (
+              <>
+                <dt>Website</dt>
+                <dd>
+                  <a href={place.website} target="_blank" rel="noopener noreferrer">
+                    {hostname}
+                  </a>
+                </dd>
+              </>
+            );
+          })()}
 
           {openingHoursSpec.length > 0 && (
             <>
