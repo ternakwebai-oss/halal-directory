@@ -59,10 +59,10 @@ for (const key of KEEP) {
   if (generated[key] !== undefined) clean[key] = generated[key];
 }
 
-// Always ensure nodejs_compat is present — Pages needs it for Astro SSR.
+// Always ensure nodejs_compat_v2 is present — Pages needs it for Astro SSR.
+// Note: nodejs_compat and nodejs_compat_v2 are mutually exclusive; use v2 only.
 clean.compatibility_date = clean.compatibility_date ?? '2025-01-01';
-const flags = new Set(clean.compatibility_flags ?? []);
-flags.add('nodejs_compat');
+const flags = new Set((clean.compatibility_flags ?? []).filter(f => f !== 'nodejs_compat'));
 flags.add('nodejs_compat_v2');
 clean.compatibility_flags = [...flags];
 
