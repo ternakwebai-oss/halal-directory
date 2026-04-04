@@ -87,41 +87,56 @@ const breadcrumbJson = JSON.stringify({
     <h1>Halal {categoryName} Listings</h1>
     <p class="subtitle">{totalCount} listing{totalCount !== 1 ? 's' : ''}</p>
 
-    {places.length > 0 ? (
-      <section>
-        {page > 1 && <p class="page-heading">Page {page}</p>}
-        <div class="listing-grid">
-          {places.map((place) => (
-            <PlaceCard
-              slug={place.slug}
-              name={place.name}
-              city={place.city}
-              country={place.country}
-              halal_certified={place.halal_certified}
-              category_name={place.category_name ?? undefined}
-            />
-          ))}
-        </div>
+    <div class="page-layout">
+      <div class="page-layout__main">
+        {places.length > 0 ? (
+          <section>
+            {page > 1 && <p class="page-heading">Page {page}</p>}
+            <div class="listing-grid">
+              {places.map((place) => (
+                <PlaceCard
+                  slug={place.slug}
+                  name={place.name}
+                  city={place.city}
+                  country={place.country}
+                  halal_certified={place.halal_certified}
+                  category_name={place.category_name ?? undefined}
+                />
+              ))}
+            </div>
 
-        {totalPages > 1 && (
-          <nav class="pagination" aria-label="Pagination">
-            {page > 1 && (
-              <a class="pagination__btn" href={page === 2 ? canonicalBase : `${canonicalBase}?page=${page - 1}`}>
-                ← Previous
-              </a>
+            {totalPages > 1 && (
+              <nav class="pagination" aria-label="Pagination">
+                {page > 1 && (
+                  <a class="pagination__btn" href={page === 2 ? canonicalBase : `${canonicalBase}?page=${page - 1}`}>
+                    ← Previous
+                  </a>
+                )}
+                <span class="pagination__info">Page {page} of {totalPages}</span>
+                {page < totalPages && (
+                  <a class="pagination__btn" href={`${canonicalBase}?page=${page + 1}`}>
+                    Next →
+                  </a>
+                )}
+              </nav>
             )}
-            <span class="pagination__info">Page {page} of {totalPages}</span>
-            {page < totalPages && (
-              <a class="pagination__btn" href={`${canonicalBase}?page=${page + 1}`}>
-                Next →
-              </a>
-            )}
-          </nav>
+          </section>
+        ) : (
+          <p class="empty-state">No listings found in this category yet. <a href="/submit">Add one!</a></p>
         )}
-      </section>
-    ) : (
-      <p class="empty-state">No listings found in this category yet. <a href="/submit">Add one!</a></p>
-    )}
+      </div>
+
+      <!-- AdSense rectangle (300×250) — replace data-ad-client and data-ad-slot with real values -->
+      <aside class="page-layout__sidebar" aria-hidden="true">
+        <ins
+          class="adsbygoogle"
+          style="display:inline-block;width:300px;height:250px"
+          data-ad-client="ca-pub-XXXXXXXXXXXXXXXX"
+          data-ad-slot="PLACEHOLDER_RECTANGLE"
+        ></ins>
+        <script is:inline>(adsbygoogle = window.adsbygoogle || []).push({});</script>
+      </aside>
+    </div>
   </div>
 </Base>
 
@@ -186,6 +201,27 @@ const breadcrumbJson = JSON.stringify({
   .pagination__info {
     font-size: 0.9rem;
     color: #555;
+  }
+
+  /* Two-column layout with sidebar */
+  .page-layout {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 2rem;
+    align-items: start;
+  }
+
+  @media (min-width: 900px) {
+    .page-layout {
+      grid-template-columns: 1fr 300px;
+    }
+  }
+
+  .page-layout__sidebar {
+    position: sticky;
+    top: 4rem;
+    display: flex;
+    justify-content: center;
   }
 
   .empty-state {

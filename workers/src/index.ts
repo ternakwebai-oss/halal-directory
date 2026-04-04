@@ -482,6 +482,20 @@ router.post('/api/submissions', async (request, env: Env) => {
 });
 
 // ---------------------------------------------------------------------------
+// Map data — public, returns all published places with coordinates
+// ---------------------------------------------------------------------------
+router.get('/api/map-data', async (_request, env: Env) => {
+  const { results } = await env.DB.prepare(`
+    SELECT p.id, p.name, p.lat, p.lng, p.place_type, p.slug,
+           c.name AS category
+    FROM places p
+    LEFT JOIN categories c ON p.category_id = c.id
+    WHERE p.published = 1 AND p.lat IS NOT NULL AND p.lng IS NOT NULL
+  `).all();
+  return Response.json({ places: results });
+});
+
+// ---------------------------------------------------------------------------
 // Fallback
 // ---------------------------------------------------------------------------
 router.all('*', () => Response.json({ error: 'Not found' }, { status: 404 }));

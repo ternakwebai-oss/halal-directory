@@ -1,0 +1,171 @@
+---
+import Base from '../layouts/Base.astro';
+
+interface MapPlace {
+  id: number;
+  name: string;
+  lat: number;
+  lng: number;
+  place_type: string;
+  category: string | null;
+  slug: string;
+}
+
+const runtime = Astro.locals.runtime;
+const db = runtime?.env?.DB as D1Database | undefined;
+
+let mapPlaces: MapPlace[] = [];
+let centerLat = 20;
+let centerLng = 0;
+let defaultZoom = 2;
+
+if (db) {
+  const result = await db.prepare(`
+    SELECT p.id, p.name, p.lat, p.lng, p.place_type, p.slug,
+           c.name AS category
+    FROM places p
+    LEFT JOIN categories c ON p.category_id = c.id
+    WHERE p.published = 1 AND p.lat IS NOT NULL AND p.lng IS NOT NULL
+  `).all<MapPlace>();
+
+  mapPlaces = result.results;
+
+  if (mapPlaces.length > 0) {
+    const topCity = await db.prepare(`
+      SELECT AVG(lat) AS lat, AVG(lng) AS lng, COUNT(*) AS cnt
+      FROM places
+      WHERE published = 1 AND lat IS NOT NULL AND lng IS NOT NULL
+      GROUP BY city, country
+      ORDER BY cnt DESC
+      LIMIT 1
+    `).first<{ lat: number; lng: number; cnt: number }>();
+
+    if (topCity) {
+      centerLat = topCity.lat;
+      centerLng = topCity.lng;
+      defaultZoom = 12;
+    }
+  }
+}
+
+const placeCount = mapPlaces.length;
+---
+
+<Base
+  title="Map View — Halal Directory"
+  description="Browse halal-certified restaurants, cafés, butchers, mosques, and more on an interactive map."
+>
+  <link slot="head" rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
+
+  <div class="map-page">
+    <div class="map-header">
+      <div class="container">
+        <h1>Map View</h1>
+        <p class="map-subtitle">{placeCount} place{placeCount !== 1 ? 's' : ''} with coordinates</p>
+      </div>
+    </div>
+    <div id="map"></div>
+  </div>
+
+  <script is:inline src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+  <script is:inline define:vars={{ mapPlaces, centerLat, centerLng, defaultZoom }}>
+    const map = L.map('map').setView([centerLat, centerLng], defaultZoom);
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+      maxZoom: 19,
+    }).addTo(map);
+
+    const restaurantIcon = L.divIcon({
+      className: '',
+      html: '<div class="map-marker">🍽️</div>',
+      iconSize: [32, 32],
+      iconAnchor: [16, 16],
+      popupAnchor: [0, -18],
+    });
+
+    const prayerIcon = L.divIcon({
+      className: '',
+      html: '<div class="map-marker">🕌</div>',
+      iconSize: [32, 32],
+      iconAnchor: [16, 16],
+      popupAnchor: [0, -18],
+    });
+
+    for (const place of mapPlaces) {
+      const isPrayer = place.place_type === 'mosque' || place.place_type === 'prayer_room';
+      const icon = isPrayer ? prayerIcon : restaurantIcon;
+      const catHtml = place.category
+        ? `<span class="mp-cat">${place.category}</span>`
+        : '';
+      const popup = `<div class="mp"><strong>${place.name}</strong>${catHtml}<a class="mp-link" href="/places/${place.slug}">View listing &rarr;</a></div>`;
+      L.marker([place.lat, place.lng], { icon }).addTo(map).bindPopup(popup);
+    }
+  </script>
+</Base>
+
+<style>
+  .container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 1.5rem;
+  }
+
+  .map-page {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .map-header {
+    padding: 1.25rem 0 0.75rem;
+    border-bottom: 1px solid #e5e5e5;
+    background: #fff;
+  }
+
+  .map-header h1 {
+    font-size: 1.5rem;
+    font-weight: 800;
+    margin-bottom: 0.15rem;
+  }
+
+  .map-subtitle {
+    color: #666;
+    font-size: 0.9rem;
+  }
+
+  #map {
+    width: 100%;
+    height: calc(100vh - 10rem);
+    min-height: 400px;
+  }
+
+  :global(.mp) {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    min-width: 160px;
+    font-family: system-ui, sans-serif;
+  }
+  :global(.mp strong) { font-size: 0.95rem; color: #1a1a1a; }
+  :global(.mp-cat) {
+    font-size: 0.78rem;
+    color: #555;
+    background: #f3f4f6;
+    padding: 0.15rem 0.4rem;
+    border-radius: 4px;
+    width: fit-content;
+  }
+  :global(.mp-link) {
+    font-size: 0.85rem;
+    color: #15803d;
+    font-weight: 600;
+    text-decoration: none;
+    margin-top: 0.15rem;
+  }
+  :global(.mp-link:hover) { text-decoration: underline; }
+  :global(.map-marker) {
+    font-size: 1.4rem;
+    line-height: 1;
+    filter: drop-shadow(0 1px 3px rgba(0,0,0,0.35));
+  }
+</style>

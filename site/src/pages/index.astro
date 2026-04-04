@@ -85,6 +85,17 @@ if (db) {
     </div>
   </section>
 
+  <!-- AdSense leaderboard (728×90) — replace data-ad-client and data-ad-slot with real values -->
+  <div class="ad-leaderboard" aria-hidden="true">
+    <ins
+      class="adsbygoogle"
+      style="display:inline-block;width:728px;height:90px"
+      data-ad-client="ca-pub-XXXXXXXXXXXXXXXX"
+      data-ad-slot="PLACEHOLDER_LEADERBOARD"
+    ></ins>
+    <script is:inline>(adsbygoogle = window.adsbygoogle || []).push({});</script>
+  </div>
+
   <!-- Categories -->
   <section class="section">
     <div class="container">
@@ -278,6 +289,16 @@ if (db) {
     padding: 2rem 0;
   }
   .empty-state a { color: #15803d; text-decoration: underline; }
+
+  /* AdSense leaderboard */
+  .ad-leaderboard {
+    display: flex;
+    justify-content: center;
+    padding: 1rem 0;
+    background: #f9f9f9;
+    border-bottom: 1px solid #ebebeb;
+    overflow: hidden;
+  }
 
   /* Button */
   .btn {

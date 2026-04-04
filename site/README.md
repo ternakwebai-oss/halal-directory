@@ -1,43 +1,50 @@
-# Astro Starter Kit: Minimal
+# Halal Directory — Site
 
-```sh
-npm create astro@latest -- --template minimal
+Astro (SSR) frontend for the Halal Directory, deployed on Cloudflare Pages with D1 database access.
+
+## Commands
+
+Run from `site/`:
+
+| Command           | Action                                   |
+| :---------------- | :--------------------------------------- |
+| `npm install`     | Install dependencies                     |
+| `npm run dev`     | Start local dev server at `localhost:4321` |
+| `npm run build`   | Build for production to `./dist/`        |
+| `npm run preview` | Preview production build locally         |
+
+## Google AdSense Setup
+
+Ad slot placeholders are in place across the site. Before going live, replace the placeholder values in the files below.
+
+### 1. Replace the Publisher ID in the base layout
+
+**File:** `src/layouts/Base.astro`
+
+Find this line and replace `ca-pub-XXXXXXXXXXXXXXXX` with your real AdSense publisher ID:
+
+```html
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-XXXXXXXXXXXXXXXX" crossorigin="anonymous"></script>
 ```
 
-> 🧑‍🚀 **Seasoned astronaut?** Delete this file. Have fun!
+### 2. Replace slot IDs in each page
 
-## 🚀 Project Structure
+Each `<ins class="adsbygoogle">` tag has `data-ad-client` and `data-ad-slot` attributes that need real values.
 
-Inside of your Astro project, you'll see the following folders and files:
+| Page | File | Slot placeholder | Format |
+| :--- | :--- | :--------------- | :----- |
+| Homepage (below hero) | `src/pages/index.astro` | `PLACEHOLDER_LEADERBOARD` | Leaderboard 728×90 |
+| Category pages (sidebar) | `src/pages/categories/[category]/index.astro` | `PLACEHOLDER_RECTANGLE` | Rectangle 300×250 |
+| Listing detail (below description) | `src/pages/places/[slug].astro` | `PLACEHOLDER_RECTANGLE` | Rectangle 300×250 |
 
-```text
-/
-├── public/
-├── src/
-│   └── pages/
-│       └── index.astro
-└── package.json
-```
+For each file, set:
+- `data-ad-client="ca-pub-XXXXXXXXXXXXXXXX"` → your real publisher ID
+- `data-ad-slot="PLACEHOLDER_..."` → the numeric slot ID from your AdSense account
 
-Astro looks for `.astro` or `.md` files in the `src/pages/` directory. Each page is exposed as a route based on its file name.
+### 3. How to get slot IDs
 
-There's nothing special about `src/components/`, but that's where we like to put any Astro/React/Vue/Svelte/Preact components.
-
-Any static assets, like images, can be placed in the `public/` directory.
-
-## 🧞 Commands
-
-All commands are run from the root of the project, from a terminal:
-
-| Command                   | Action                                           |
-| :------------------------ | :----------------------------------------------- |
-| `npm install`             | Installs dependencies                            |
-| `npm run dev`             | Starts local dev server at `localhost:4321`      |
-| `npm run build`           | Build your production site to `./dist/`          |
-| `npm run preview`         | Preview your build locally, before deploying     |
-| `npm run astro ...`       | Run CLI commands like `astro add`, `astro check` |
-| `npm run astro -- --help` | Get help using the Astro CLI                     |
-
-## 👀 Want to learn more?
-
-Feel free to check [our documentation](https://docs.astro.build) or jump into our [Discord server](https://astro.build/chat).
+1. Log in to [Google AdSense](https://adsense.google.com/).
+2. Go to **Ads → By ad unit → Display ads**.
+3. Create a new ad unit for each placement (leaderboard, rectangle).
+4. Copy the numeric slot ID (e.g. `1234567890`) from the generated code snippet.
+5. Paste it into the corresponding `data-ad-slot` attribute.

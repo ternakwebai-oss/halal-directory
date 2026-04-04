@@ -257,17 +257,15 @@ const breadcrumbJson = JSON.stringify(breadcrumbSchema);
         </dl>
       </section>
 
-      <!-- AdSense slot — replace data-ad-client / data-ad-slot with real values -->
+      <!-- AdSense rectangle (300×250) — replace data-ad-client and data-ad-slot with real values -->
       <div class="adsense-wrap" aria-hidden="true">
         <ins
           class="adsbygoogle"
-          style="display:block"
+          style="display:inline-block;width:300px;height:250px"
           data-ad-client="ca-pub-XXXXXXXXXXXXXXXX"
-          data-ad-slot="0000000000"
-          data-ad-format="auto"
-          data-full-width-responsive="true"
+          data-ad-slot="PLACEHOLDER_RECTANGLE"
         ></ins>
-        <!-- <script>(adsbygoogle = window.adsbygoogle || []).push({});<\/script> -->
+        <script is:inline>(adsbygoogle = window.adsbygoogle || []).push({});</script>
       </div>
     </div>
   </div>
