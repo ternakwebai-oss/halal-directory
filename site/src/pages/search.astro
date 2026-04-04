@@ -1,0 +1,321 @@
+---
+import Base from '../layouts/Base.astro';
+
+interface SearchResult {
+  id: number;
+  slug: string;
+  name: string;
+  place_type: string;
+  city: string;
+  country: string;
+  category: string | null;
+  description_snippet: string | null;
+}
+
+const q = Astro.url.searchParams.get('q')?.trim() ?? '';
+const type = Astro.url.searchParams.get('type') ?? 'all';
+const country = Astro.url.searchParams.get('country') ?? '';
+
+const runtime = Astro.locals.runtime;
+const db = runtime?.env?.DB as D1Database | undefined;
+
+let results: SearchResult[] = [];
+let searchError = false;
+
+if (q && db) {
+  try {
+    const ftsQuery = `"${q.replace(/"/g, '""')}"`;
+    let sql = `
+      SELECT p.id, p.slug, p.name, p.place_type, p.city, p.country,
+             c.name AS category,
+             snippet(places_fts, 1, '<mark>', '</mark>', '…', 20) AS description_snippet
+      FROM places_fts
+      JOIN places p ON p.id = places_fts.rowid
+      LEFT JOIN categories c ON p.category_id = c.id
+      WHERE places_fts MATCH ? AND p.published = 1
+    `;
+    const params: (string | number)[] = [ftsQuery];
+
+    if (type === 'restaurant' || type === 'prayer') {
+      sql += ` AND p.place_type = ?`;
+      params.push(type);
+    }
+    if (country) {
+      sql += ` AND p.country = ?`;
+      params.push(country);
+    }
+
+    sql += ` ORDER BY rank LIMIT 40`;
+
+    const { results: rows } = await db.prepare(sql).bind(...params).all<SearchResult>();
+    results = rows;
+  } catch {
+    searchError = true;
+  }
+}
+
+const title = q
+  ? `Search results for "${q}" — Halal Directory`
+  : 'Search — Halal Directory';
+---
+
+<Base title={title} description={q ? `Halal place search results for "${q}".` : 'Search halal restaurants, cafés, and more worldwide.'}>
+  <section class="search-hero">
+    <div class="container">
+      <h1>Search Halal Places</h1>
+      <form class="search-form" method="get" action="/search">
+        <div class="search-form__row">
+          <input
+            type="search"
+            name="q"
+            value={q}
+            placeholder="Restaurant name, cuisine, city…"
+            aria-label="Search query"
+            autofocus={!q}
+          />
+          <button type="submit">Search</button>
+        </div>
+        <div class="search-form__filters">
+          <label class="filter-label">
+            Type:
+            <select name="type">
+              <option value="all" selected={type === 'all'}>All</option>
+              <option value="restaurant" selected={type === 'restaurant'}>Restaurant / Food</option>
+              <option value="prayer" selected={type === 'prayer'}>Prayer Space</option>
+            </select>
+          </label>
+        </div>
+      </form>
+    </div>
+  </section>
+
+  <section class="results-section">
+    <div class="container">
+      {!q && (
+        <p class="empty-state">Enter a search term above to find halal places.</p>
+      )}
+
+      {q && searchError && (
+        <p class="empty-state error">Something went wrong — please try a different search term.</p>
+      )}
+
+      {q && !searchError && results.length === 0 && (
+        <div class="no-results">
+          <p class="no-results__msg">No results for <strong>"{q}"</strong>.</p>
+          <p class="no-results__suggestions">Try:</p>
+          <ul>
+            <li>Checking your spelling</li>
+            <li>Using fewer or different keywords</li>
+            <li><a href="/categories">Browse by category</a></li>
+            <li><a href="/countries">Browse by country</a></li>
+          </ul>
+        </div>
+      )}
+
+      {results.length > 0 && (
+        <>
+          <p class="results-count">
+            {results.length} result{results.length !== 1 ? 's' : ''} for <strong>"{q}"</strong>
+          </p>
+          <div class="results-grid">
+            {results.map((place) => (
+              <a class="result-card" href={`/places/${place.slug}`}>
+                <div class="result-card__header">
+                  <span class="result-card__name">{place.name}</span>
+                  <span class={`result-card__type-badge result-card__type-badge--${place.place_type}`}>
+                    {place.place_type === 'prayer' ? 'Prayer Space' : 'Restaurant'}
+                  </span>
+                </div>
+                <div class="result-card__meta">
+                  {place.category && (
+                    <span class="result-card__category">{place.category}</span>
+                  )}
+                  <span class="result-card__location">📍 {place.city}, {place.country}</span>
+                </div>
+                {place.description_snippet && (
+                  <p class="result-card__snippet" set:html={place.description_snippet} />
+                )}
+              </a>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  </section>
+</Base>
+
+<style>
+  .container {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 0 1.5rem;
+  }
+
+  /* Hero / search bar */
+  .search-hero {
+    background: linear-gradient(135deg, #14532d 0%, #15803d 100%);
+    color: #fff;
+    padding: 2.5rem 0 2rem;
+  }
+  .search-hero h1 {
+    font-size: 1.8rem;
+    font-weight: 800;
+    margin-bottom: 1.25rem;
+  }
+
+  .search-form__row {
+    display: flex;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+    margin-bottom: 0.75rem;
+  }
+  .search-form__row input {
+    flex: 1;
+    border: none;
+    padding: 0.85rem 1.2rem;
+    font-size: 1rem;
+    outline: none;
+  }
+  .search-form__row button {
+    background: #f59e0b;
+    color: #fff;
+    border: none;
+    padding: 0.85rem 1.5rem;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .search-form__row button:hover { background: #d97706; }
+
+  .search-form__filters {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+  .filter-label {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.9rem;
+    color: rgba(255,255,255,0.9);
+  }
+  .filter-label select {
+    border: none;
+    border-radius: 4px;
+    padding: 0.3rem 0.6rem;
+    font-size: 0.9rem;
+    background: rgba(255,255,255,0.15);
+    color: #fff;
+    cursor: pointer;
+  }
+  .filter-label select option { color: #1a1a1a; background: #fff; }
+
+  /* Results */
+  .results-section { padding: 2rem 0 3rem; }
+
+  .results-count {
+    margin-bottom: 1.25rem;
+    color: #555;
+    font-size: 0.95rem;
+  }
+
+  .results-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 1rem;
+  }
+
+  .result-card {
+    display: block;
+    background: #fff;
+    border: 1px solid #e5e5e5;
+    border-radius: 8px;
+    padding: 1rem 1.25rem;
+    transition: box-shadow 0.15s, border-color 0.15s;
+  }
+  .result-card:hover {
+    box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+    border-color: #15803d;
+  }
+
+  .result-card__header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.5rem;
+    margin-bottom: 0.4rem;
+  }
+  .result-card__name {
+    font-weight: 600;
+    font-size: 1rem;
+    color: #1a1a1a;
+    flex: 1;
+  }
+  .result-card__type-badge {
+    flex-shrink: 0;
+    font-size: 0.7rem;
+    font-weight: 600;
+    padding: 0.2rem 0.5rem;
+    border-radius: 999px;
+    white-space: nowrap;
+  }
+  .result-card__type-badge--restaurant {
+    background: #fef9c3;
+    color: #854d0e;
+  }
+  .result-card__type-badge--prayer {
+    background: #dbeafe;
+    color: #1d4ed8;
+  }
+
+  .result-card__meta {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    font-size: 0.82rem;
+    color: #666;
+    flex-wrap: wrap;
+    margin-bottom: 0.5rem;
+  }
+  .result-card__category {
+    background: #f3f4f6;
+    border-radius: 4px;
+    padding: 0.1rem 0.4rem;
+    color: #374151;
+  }
+
+  .result-card__snippet {
+    font-size: 0.85rem;
+    color: #555;
+    line-height: 1.5;
+    margin: 0;
+  }
+  .result-card__snippet :global(mark) {
+    background: #fef08a;
+    color: #1a1a1a;
+    border-radius: 2px;
+    padding: 0 1px;
+  }
+
+  /* Empty / error states */
+  .empty-state {
+    color: #666;
+    padding: 2rem 0;
+    font-size: 1rem;
+  }
+  .empty-state.error { color: #b91c1c; }
+
+  .no-results { padding: 1rem 0; }
+  .no-results__msg { font-size: 1.05rem; margin-bottom: 1rem; }
+  .no-results__suggestions { font-size: 0.9rem; color: #555; margin-bottom: 0.5rem; }
+  .no-results ul {
+    list-style: disc;
+    padding-left: 1.5rem;
+    font-size: 0.9rem;
+    color: #555;
+    line-height: 2;
+  }
+  .no-results a { color: #15803d; text-decoration: underline; }
+</style>

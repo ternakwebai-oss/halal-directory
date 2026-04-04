@@ -608,6 +608,56 @@ router.get('/api/map-data', async (_request, env: Env) => {
 });
 
 // ---------------------------------------------------------------------------
+// Search — FTS5 full-text search
+// GET /api/search?q=&type=restaurant|prayer|all&country=&limit=20
+// ---------------------------------------------------------------------------
+router.get('/api/search', async (request, env: Env) => {
+  const url = new URL(request.url);
+  const q = url.searchParams.get('q')?.trim() ?? '';
+  const type = url.searchParams.get('type') ?? 'all';
+  const country = url.searchParams.get('country') ?? '';
+  const limit = Math.min(50, Math.max(1, parseInt(url.searchParams.get('limit') ?? '20', 10)));
+
+  if (!q) {
+    return Response.json({ results: [] });
+  }
+
+  // Wrap in quotes for phrase-friendly search; escape embedded quotes
+  const ftsQuery = `"${q.replace(/"/g, '""')}"`;
+
+  let sql = `
+    SELECT p.id, p.slug, p.name, p.place_type, p.city, p.country,
+           c.name AS category,
+           snippet(places_fts, 1, '<mark>', '</mark>', '…', 20) AS description_snippet
+    FROM places_fts
+    JOIN places p ON p.id = places_fts.rowid
+    LEFT JOIN categories c ON p.category_id = c.id
+    WHERE places_fts MATCH ? AND p.published = 1
+  `;
+  const params: (string | number)[] = [ftsQuery];
+
+  if (type === 'restaurant' || type === 'prayer') {
+    sql += ` AND p.place_type = ?`;
+    params.push(type);
+  }
+  if (country) {
+    sql += ` AND p.country = ?`;
+    params.push(country);
+  }
+
+  sql += ` ORDER BY rank LIMIT ?`;
+  params.push(limit);
+
+  try {
+    const { results } = await env.DB.prepare(sql).bind(...params).all();
+    return Response.json({ results });
+  } catch {
+    // FTS5 syntax errors (e.g. empty query after sanitisation) → empty results
+    return Response.json({ results: [] });
+  }
+});
+
+// ---------------------------------------------------------------------------
 // Fallback
 // ---------------------------------------------------------------------------
 router.all('*', () => Response.json({ error: 'Not found' }, { status: 404 }));
