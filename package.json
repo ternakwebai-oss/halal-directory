@@ -1,0 +1,21 @@
+{
+  "name": "halal-directory",
+  "version": "0.0.1",
+  "private": true,
+  "workspaces": [
+    "site",
+    "workers"
+  ],
+  "scripts": {
+    "dev:site": "npm run dev --workspace=site",
+    "dev:workers": "npm run dev --workspace=workers",
+    "build": "npm run build --workspace=site",
+    "type-check": "npm run type-check --workspace=workers"
+  },
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "devDependencies": {
+    "@types/node": "^25.5.2"
+  }
+}

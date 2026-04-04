@@ -1,0 +1,17 @@
+name = "halal-directory-api"
+main = "src/index.ts"
+compatibility_date = "2025-01-01"
+compatibility_flags = ["nodejs_compat"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "halal-directory"
+database_id = "placeholder-replace-with-real-id"
+migrations_dir = "migrations"
+
+[vars]
+# Non-secret vars go here. Secrets are set via `wrangler secret put`.
+
+[dev]
+port = 8787
+local_protocol = "http"

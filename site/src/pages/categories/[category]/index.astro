@@ -1,0 +1,196 @@
+---
+import Base from '../../../layouts/Base.astro';
+import PlaceCard from '../../../components/PlaceCard.astro';
+
+interface Place {
+  slug: string;
+  name: string;
+  city: string;
+  country: string;
+  halal_certified: number;
+  category_name: string | null;
+}
+
+const { category: categorySlug } = Astro.params as { category: string };
+
+const PAGE_SIZE = 24;
+const pageParam = Astro.url.searchParams.get('page');
+const page = Math.max(1, parseInt(pageParam ?? '1', 10) || 1);
+const offset = (page - 1) * PAGE_SIZE;
+
+const runtime = Astro.locals.runtime;
+const db = runtime?.env?.DB as D1Database | undefined;
+
+let places: Place[] = [];
+let totalCount = 0;
+let categoryName = '';
+
+if (db) {
+  const [placesResult, countResult, catResult] = await Promise.all([
+    db.prepare(`
+      SELECT p.slug, p.name, p.city, p.country, p.halal_certified,
+             c.name AS category_name
+      FROM places p
+      JOIN categories c ON p.category_id = c.id
+      WHERE p.published = 1 AND c.slug = ?
+      ORDER BY p.name ASC
+      LIMIT ? OFFSET ?
+    `).bind(categorySlug, PAGE_SIZE, offset).all<Place>(),
+
+    db.prepare(`
+      SELECT COUNT(*) AS n
+      FROM places p
+      JOIN categories c ON p.category_id = c.id
+      WHERE p.published = 1 AND c.slug = ?
+    `).bind(categorySlug).first<{ n: number }>(),
+
+    db.prepare(`
+      SELECT name FROM categories WHERE slug = ? LIMIT 1
+    `).bind(categorySlug).first<{ name: string }>(),
+  ]);
+
+  places = placesResult.results;
+  totalCount = countResult?.n ?? 0;
+  categoryName = catResult?.name ?? categorySlug;
+}
+
+const totalPages = Math.ceil(totalCount / PAGE_SIZE);
+const canonicalBase = new URL(`/categories/${categorySlug}`, Astro.site).href;
+const canonical = page > 1 ? `${canonicalBase}?page=${page}` : canonicalBase;
+
+const title = `${categoryName} — Halal Places | Halal Directory`;
+const description = `Find ${totalCount} halal ${categoryName.toLowerCase()} listings worldwide. Certified and trusted.`;
+
+const breadcrumbJson = JSON.stringify({
+  '@context': 'https://schema.org',
+  '@type': 'BreadcrumbList',
+  itemListElement: [
+    { '@type': 'ListItem', position: 1, name: 'Home', item: Astro.site?.href },
+    { '@type': 'ListItem', position: 2, name: 'Categories', item: new URL('/categories', Astro.site).href },
+    { '@type': 'ListItem', position: 3, name: categoryName, item: canonicalBase },
+  ],
+});
+---
+
+<Base title={title} description={description} canonical={canonical}>
+  <script type="application/ld+json" set:html={breadcrumbJson} slot="head" />
+
+  <div class="container">
+    <nav class="breadcrumb" aria-label="Breadcrumb">
+      <a href="/">Home</a>
+      <span aria-hidden="true">›</span>
+      <a href="/categories">Categories</a>
+      <span aria-hidden="true">›</span>
+      <span aria-current="page">{categoryName}</span>
+    </nav>
+
+    <h1>Halal {categoryName} Listings</h1>
+    <p class="subtitle">{totalCount} listing{totalCount !== 1 ? 's' : ''}</p>
+
+    {places.length > 0 ? (
+      <section>
+        {page > 1 && <p class="page-heading">Page {page}</p>}
+        <div class="listing-grid">
+          {places.map((place) => (
+            <PlaceCard
+              slug={place.slug}
+              name={place.name}
+              city={place.city}
+              country={place.country}
+              halal_certified={place.halal_certified}
+              category_name={place.category_name ?? undefined}
+            />
+          ))}
+        </div>
+
+        {totalPages > 1 && (
+          <nav class="pagination" aria-label="Pagination">
+            {page > 1 && (
+              <a class="pagination__btn" href={page === 2 ? canonicalBase : `${canonicalBase}?page=${page - 1}`}>
+                ← Previous
+              </a>
+            )}
+            <span class="pagination__info">Page {page} of {totalPages}</span>
+            {page < totalPages && (
+              <a class="pagination__btn" href={`${canonicalBase}?page=${page + 1}`}>
+                Next →
+              </a>
+            )}
+          </nav>
+        )}
+      </section>
+    ) : (
+      <p class="empty-state">No listings found in this category yet. <a href="/submit">Add one!</a></p>
+    )}
+  </div>
+</Base>
+
+<style>
+  .container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 2rem 1.5rem;
+  }
+
+  .breadcrumb {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.85rem;
+    color: #666;
+    margin-bottom: 1.5rem;
+  }
+  .breadcrumb a { color: #15803d; }
+  .breadcrumb a:hover { text-decoration: underline; }
+
+  h1 {
+    font-size: clamp(1.5rem, 4vw, 2rem);
+    font-weight: 800;
+    margin-bottom: 0.25rem;
+  }
+  .subtitle {
+    color: #555;
+    margin-bottom: 2rem;
+  }
+
+  .page-heading {
+    font-size: 0.95rem;
+    color: #666;
+    margin-bottom: 1rem;
+  }
+
+  .listing-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 1rem;
+  }
+
+  .pagination {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+    margin-top: 2.5rem;
+  }
+  .pagination__btn {
+    display: inline-block;
+    background: #15803d;
+    color: #fff;
+    padding: 0.55rem 1.2rem;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    transition: background 0.15s;
+  }
+  .pagination__btn:hover { background: #166534; }
+  .pagination__info {
+    font-size: 0.9rem;
+    color: #555;
+  }
+
+  .empty-state {
+    color: #666;
+    padding: 2rem 0;
+  }
+  .empty-state a { color: #15803d; text-decoration: underline; }
+</style>

@@ -1,0 +1,19 @@
+{
+  "name": "workers",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "itty-router": "^5.0.18"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250327.0",
+    "typescript": "^5.8.3",
+    "wrangler": "^3.111.0"
+  }
+}
