@@ -8,6 +8,7 @@
   "scripts": {
     "dev": "astro dev",
     "build": "astro build",
+    "postbuild": "node -e \"const f='dist/server/wrangler.json',fs=require('fs');if(fs.existsSync(f)){const c=JSON.parse(fs.readFileSync(f,'utf8'));delete c.assets;delete c.kv_namespaces;if(c.triggers&&Object.keys(c.triggers).length===0)delete c.triggers;fs.writeFileSync(f,JSON.stringify(c,null,2));console.log('Patched wrangler.json for Cloudflare Pages compatibility')}\"",
     "preview": "astro preview",
     "astro": "astro"
   },
