@@ -6,7 +6,7 @@ compatibility_flags = ["nodejs_compat"]
 [[d1_databases]]
 binding = "DB"
 database_name = "halal-directory"
-database_id = "placeholder-replace-with-real-id"
+database_id = "6b8e0660-9ef2-48d1-aaf9-2ea87bbfb793"
 migrations_dir = "migrations"
 
 [vars]
