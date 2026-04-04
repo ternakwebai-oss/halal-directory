@@ -59,6 +59,13 @@ for (const key of KEEP) {
   if (generated[key] !== undefined) clean[key] = generated[key];
 }
 
+// Always ensure nodejs_compat is present — Pages needs it for Astro SSR.
+clean.compatibility_date = clean.compatibility_date ?? '2025-01-01';
+const flags = new Set(clean.compatibility_flags ?? []);
+flags.add('nodejs_compat');
+flags.add('nodejs_compat_v2');
+clean.compatibility_flags = [...flags];
+
 // Re-add kv_namespaces only if every entry has a real "id" field (not just binding).
 if (Array.isArray(generated.kv_namespaces)) {
   const valid = generated.kv_namespaces.filter(kv => kv.id && kv.id.trim() !== '');

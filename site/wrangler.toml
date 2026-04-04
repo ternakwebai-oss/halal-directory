@@ -1,6 +1,6 @@
 name = "halal-directory-site"
 compatibility_date = "2025-01-01"
-compatibility_flags = ["nodejs_compat"]
+compatibility_flags = ["nodejs_compat", "nodejs_compat_v2"]
 pages_build_output_dir = "./dist"
 
 [[d1_databases]]
