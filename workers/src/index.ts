@@ -27,6 +27,15 @@ import {
   requireAuth,
   verifyPassword,
 } from './auth';
+import {
+  adminAuthMiddleware,
+  handleAdminDashboard,
+  handleAdminLoginPage,
+  handleAdminLoginSubmit,
+  handleAdminLogout,
+  handleAdminPlaces,
+  handleAdminUsers,
+} from './admin';
 
 export interface Env {
   DB: D1Database;
@@ -44,6 +53,22 @@ const router = AutoRouter();
 // Attach auth context to every request
 // ---------------------------------------------------------------------------
 router.all('*', authMiddleware);
+
+// ---------------------------------------------------------------------------
+// Admin auth middleware — redirects unauthenticated /admin/* to /admin/login
+// (runs after authMiddleware so session cookie is already parsed)
+// ---------------------------------------------------------------------------
+router.all('/admin/*', adminAuthMiddleware);
+
+// ---------------------------------------------------------------------------
+// Admin HTML routes (server-rendered, no Astro)
+// ---------------------------------------------------------------------------
+router.get('/admin/login', handleAdminLoginPage);
+router.post('/admin/login', handleAdminLoginSubmit);
+router.get('/admin/logout', handleAdminLogout);
+router.get('/admin', handleAdminDashboard);
+router.get('/admin/places', handleAdminPlaces);
+router.get('/admin/users', handleAdminUsers);
 
 // ---------------------------------------------------------------------------
 // Health
