@@ -17,6 +17,8 @@ migrations_dir = "migrations"
 #   wrangler secret put CLOUDINARY_CLOUD_NAME
 #   wrangler secret put CLOUDINARY_API_KEY
 #   wrangler secret put CLOUDINARY_API_SECRET
+#   wrangler secret put TURNSTILE_SITE_KEY    # Cloudflare Turnstile site key (public, used in frontend)
+#   wrangler secret put TURNSTILE_SECRET_KEY  # Cloudflare Turnstile secret key (server-side verify)
 
 [dev]
 port = 8787

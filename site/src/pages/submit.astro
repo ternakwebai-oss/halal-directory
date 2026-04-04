@@ -1,0 +1,391 @@
+---
+import Base from '../layouts/Base.astro';
+
+interface Category {
+  id: number;
+  name: string;
+  slug: string;
+}
+
+interface CityRow {
+  city: string;
+  country: string;
+}
+
+interface CountryRow {
+  country: string;
+}
+
+const runtime = Astro.locals.runtime;
+const db = runtime?.env?.DB as D1Database | undefined;
+const turnstileSiteKey = (runtime?.env as Record<string, string> | undefined)?.TURNSTILE_SITE_KEY ?? '';
+
+let categories: Category[] = [];
+let cities: CityRow[] = [];
+let countries: CountryRow[] = [];
+
+if (db) {
+  const [catsResult, citiesResult, countriesResult] = await Promise.all([
+    db.prepare(`SELECT id, name, slug FROM categories ORDER BY name`).all<Category>(),
+    db.prepare(`SELECT DISTINCT city, country FROM places WHERE published = 1 ORDER BY city`).all<CityRow>(),
+    db.prepare(`SELECT DISTINCT country FROM places WHERE published = 1 ORDER BY country`).all<CountryRow>(),
+  ]);
+  categories = catsResult.results;
+  cities = citiesResult.results;
+  countries = countriesResult.results;
+}
+---
+
+<Base
+  title="Submit a Listing — Halal Directory"
+  description="Add a new halal restaurant, prayer place, or other halal listing to our directory."
+>
+  <section class="submit-page">
+    <div class="container">
+      <div class="form-card" id="form-container">
+        <h1>Submit a Listing</h1>
+        <p class="subtitle">Know a halal place that's not listed yet? Submit it for review.</p>
+
+        <div id="success-message" class="success-banner" style="display:none">
+          <strong>Thank you!</strong> Your submission has been received and will be reviewed by our team.
+        </div>
+
+        <div id="error-message" class="error-banner" style="display:none"></div>
+
+        <form id="submit-form" novalidate>
+          <!-- Name -->
+          <div class="form-group">
+            <label for="name">Place Name <span class="req">*</span></label>
+            <input type="text" id="name" name="name" required placeholder="e.g. Al-Madina Restaurant" autocomplete="off">
+          </div>
+
+          <!-- Place type + category -->
+          <div class="form-row">
+            <div class="form-group">
+              <label for="place_type">Type <span class="req">*</span></label>
+              <select id="place_type" name="place_type" required>
+                <option value="restaurant">Restaurant / Food</option>
+                <option value="prayer">Prayer Place (Mosque / Prayer Room)</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="category_id">Category</label>
+              <select id="category_id" name="category_id">
+                <option value="">— Select —</option>
+                {categories.map((c) => (
+                  <option value={c.id}>{c.name}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <!-- Description -->
+          <div class="form-group">
+            <label for="description">Description</label>
+            <textarea id="description" name="description" rows="3" placeholder="Brief description of the place…"></textarea>
+          </div>
+
+          <!-- Address -->
+          <div class="form-group">
+            <label for="address">Address</label>
+            <input type="text" id="address" name="address" placeholder="Street address">
+          </div>
+
+          <!-- City + Country -->
+          <div class="form-row">
+            <div class="form-group">
+              <label for="city">City <span class="req">*</span></label>
+              {cities.length > 0 ? (
+                <>
+                  <input
+                    type="text"
+                    id="city"
+                    name="city"
+                    required
+                    placeholder="City name"
+                    list="city-list"
+                    autocomplete="off"
+                  />
+                  <datalist id="city-list">
+                    {cities.map((c) => (
+                      <option value={c.city}>{c.city}, {c.country}</option>
+                    ))}
+                  </datalist>
+                </>
+              ) : (
+                <input type="text" id="city" name="city" required placeholder="City name" autocomplete="off" />
+              )}
+            </div>
+            <div class="form-group">
+              <label for="country">Country <span class="req">*</span></label>
+              {countries.length > 0 ? (
+                <select id="country" name="country" required>
+                  <option value="">— Select —</option>
+                  {countries.map((c) => (
+                    <option value={c.country}>{c.country}</option>
+                  ))}
+                  <option value="__other">Other…</option>
+                </select>
+              ) : (
+                <input type="text" id="country" name="country" required placeholder="Country" autocomplete="off" />
+              )}
+            </div>
+          </div>
+
+          <!-- Phone + Website -->
+          <div class="form-row">
+            <div class="form-group">
+              <label for="phone">Phone</label>
+              <input type="tel" id="phone" name="phone" placeholder="+1 555 000 0000">
+            </div>
+            <div class="form-group">
+              <label for="website">Website</label>
+              <input type="url" id="website" name="website" placeholder="https://…">
+            </div>
+          </div>
+
+          <!-- Submitter email -->
+          <div class="form-group">
+            <label for="submitter_email">Your Email <span class="hint-inline">(optional — for follow-up)</span></label>
+            <input type="email" id="submitter_email" name="submitter_email" placeholder="you@example.com">
+          </div>
+
+          <!-- Turnstile widget -->
+          <div class="form-group turnstile-wrap">
+            {turnstileSiteKey ? (
+              <div
+                class="cf-turnstile"
+                data-sitekey={turnstileSiteKey}
+                data-callback="onTurnstileSuccess"
+                data-expired-callback="onTurnstileExpired"
+              ></div>
+            ) : (
+              <!-- Dev mode: skip Turnstile when key not configured -->
+              <input type="hidden" id="turnstile_token" name="turnstile_token" value="dev-bypass" />
+              <p class="hint">Spam protection not configured (dev mode).</p>
+            )}
+          </div>
+
+          <div class="form-actions">
+            <button type="submit" id="submit-btn" class="btn-submit">Submit Listing</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </section>
+
+  <script is:inline src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+
+  <style>
+    .submit-page {
+      padding: 3rem 1.5rem 5rem;
+      background: #fafaf8;
+      min-height: calc(100vh - 7rem);
+    }
+    .container {
+      max-width: 640px;
+      margin: 0 auto;
+    }
+    .form-card {
+      background: #fff;
+      border-radius: 10px;
+      box-shadow: 0 2px 12px rgba(0,0,0,.07);
+      padding: 2rem 2.5rem;
+    }
+    h1 {
+      font-size: 1.6rem;
+      font-weight: 700;
+      color: #111;
+      margin-bottom: .4rem;
+    }
+    .subtitle {
+      color: #666;
+      font-size: .95rem;
+      margin-bottom: 1.75rem;
+    }
+    .form-group {
+      margin-bottom: 1.1rem;
+    }
+    .form-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+    }
+    @media (max-width: 520px) {
+      .form-row { grid-template-columns: 1fr; }
+      .form-card { padding: 1.5rem 1.25rem; }
+    }
+    label {
+      display: block;
+      font-size: .875rem;
+      font-weight: 500;
+      color: #374151;
+      margin-bottom: .3rem;
+    }
+    .req { color: #dc2626; }
+    .hint-inline { font-weight: 400; color: #9ca3af; font-size: .8rem; }
+    .hint { font-size: .78rem; color: #9ca3af; margin-top: .25rem; }
+    input[type=text], input[type=tel], input[type=url], input[type=email],
+    select, textarea {
+      display: block;
+      width: 100%;
+      padding: .55rem .8rem;
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+      font-size: .9rem;
+      font-family: inherit;
+      background: #fff;
+      color: #111;
+      transition: border-color .15s, box-shadow .15s;
+    }
+    input:focus, select:focus, textarea:focus {
+      outline: none;
+      border-color: #15803d;
+      box-shadow: 0 0 0 3px rgba(21,128,61,.12);
+    }
+    input.invalid, select.invalid, textarea.invalid {
+      border-color: #dc2626;
+    }
+    textarea { resize: vertical; min-height: 80px; }
+    .turnstile-wrap { margin-top: .5rem; }
+    .form-actions { margin-top: 1.5rem; }
+    .btn-submit {
+      display: inline-flex;
+      align-items: center;
+      padding: .7rem 1.75rem;
+      background: #15803d;
+      color: #fff;
+      border: none;
+      border-radius: 7px;
+      font-size: .95rem;
+      font-weight: 600;
+      cursor: pointer;
+      font-family: inherit;
+      transition: background .15s;
+    }
+    .btn-submit:hover { background: #166534; }
+    .btn-submit:disabled { background: #86efac; cursor: not-allowed; }
+    .success-banner {
+      background: #d1fae5;
+      color: #065f46;
+      border: 1px solid #6ee7b7;
+      border-radius: 7px;
+      padding: 1rem 1.25rem;
+      margin-bottom: 1.5rem;
+      font-size: .95rem;
+    }
+    .error-banner {
+      background: #fee2e2;
+      color: #991b1b;
+      border: 1px solid #fca5a5;
+      border-radius: 7px;
+      padding: 1rem 1.25rem;
+      margin-bottom: 1.5rem;
+      font-size: .9rem;
+    }
+  </style>
+
+  <script>
+    let turnstileToken = '';
+
+    // Turnstile callbacks — attached to window so the widget script can find them
+    (window as any).onTurnstileSuccess = (token: string) => {
+      turnstileToken = token;
+    };
+    (window as any).onTurnstileExpired = () => {
+      turnstileToken = '';
+    };
+
+    const form = document.getElementById('submit-form') as HTMLFormElement | null;
+    const submitBtn = document.getElementById('submit-btn') as HTMLButtonElement | null;
+    const successDiv = document.getElementById('success-message') as HTMLElement | null;
+    const errorDiv = document.getElementById('error-message') as HTMLElement | null;
+
+    // Check if there's a hidden dev bypass token instead of Turnstile widget
+    const devToken = (document.getElementById('turnstile_token') as HTMLInputElement | null)?.value;
+    if (devToken) turnstileToken = devToken;
+
+    form?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (!form) return;
+
+      // Clear previous errors
+      if (errorDiv) errorDiv.style.display = 'none';
+      form.querySelectorAll('.invalid').forEach((el) => el.classList.remove('invalid'));
+
+      // Basic client-side validation
+      const required = ['name', 'city', 'country'];
+      let valid = true;
+      for (const fieldName of required) {
+        const el = form.elements.namedItem(fieldName) as HTMLInputElement | null;
+        if (!el?.value?.trim()) {
+          el?.classList.add('invalid');
+          valid = false;
+        }
+      }
+      if (!valid) {
+        showError('Please fill in all required fields.');
+        return;
+      }
+
+      if (!turnstileToken) {
+        showError('Please complete the spam protection challenge.');
+        return;
+      }
+
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Submitting…';
+      }
+
+      const data: Record<string, string | number | null> = {};
+      const fd = new FormData(form);
+      fd.forEach((val, key) => {
+        const str = (val as string).trim();
+        if (str) data[key] = str;
+      });
+      data['turnstile_token'] = turnstileToken;
+      if (data['category_id']) data['category_id'] = Number(data['category_id']);
+
+      // Handle "Other…" country option
+      if (data['country'] === '__other') {
+        const input = prompt('Please enter your country:');
+        if (!input?.trim()) {
+          if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Submit Listing'; }
+          return;
+        }
+        data['country'] = input.trim();
+      }
+
+      try {
+        const res = await fetch('/api/submit', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data),
+        });
+
+        if (res.ok) {
+          form.style.display = 'none';
+          if (successDiv) successDiv.style.display = 'block';
+        } else {
+          const body = await res.json().catch(() => ({ error: 'Submission failed. Please try again.' }));
+          showError((body as any).error ?? 'Submission failed. Please try again.');
+          if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Submit Listing'; }
+          // Reset Turnstile
+          if ((window as any).turnstile) (window as any).turnstile.reset();
+          turnstileToken = '';
+        }
+      } catch {
+        showError('Network error. Please check your connection and try again.');
+        if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Submit Listing'; }
+      }
+    });
+
+    function showError(msg: string) {
+      if (!errorDiv) return;
+      errorDiv.textContent = msg;
+      errorDiv.style.display = 'block';
+      errorDiv.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  </script>
+</Base>

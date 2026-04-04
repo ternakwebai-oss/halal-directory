@@ -94,6 +94,8 @@ Set these once per environment with `wrangler secret put`:
 | `CLOUDINARY_API_KEY` | API key from the Cloudinary dashboard |
 | `CLOUDINARY_API_SECRET` | API secret from the Cloudinary dashboard |
 | `ADMIN_SESSION_SECRET` | Random secret for admin session signing |
+| `TURNSTILE_SITE_KEY` | Cloudflare Turnstile **site key** (public, shown in the form) |
+| `TURNSTILE_SECRET_KEY` | Cloudflare Turnstile **secret key** (server-side verification) |
 
 ```bash
 cd workers
@@ -101,6 +103,8 @@ wrangler secret put CLOUDINARY_CLOUD_NAME
 wrangler secret put CLOUDINARY_API_KEY
 wrangler secret put CLOUDINARY_API_SECRET
 wrangler secret put ADMIN_SESSION_SECRET
+wrangler secret put TURNSTILE_SITE_KEY
+wrangler secret put TURNSTILE_SECRET_KEY
 ```
 
 ### Photo management (admin panel)
@@ -117,6 +121,37 @@ section below the main form:
 
 The places list (`/admin/places`) shows a 100×100 thumbnail of the first photo
 for each listing.
+
+---
+
+## Public submission form & Turnstile
+
+The `/submit` page lets anyone submit a new listing for admin review.
+
+### How it works
+
+1. Visitor fills out the form at `/submit` (name, type, category, location, contact details).
+2. Cloudflare [Turnstile](https://developers.cloudflare.com/turnstile/) widget verifies the visitor is not a bot.
+3. On submit, the browser POSTs JSON to `POST /api/submit` — the Worker validates the Turnstile token server-side (via `https://challenges.cloudflare.com/turnstile/v0/siteverify`) then inserts a row with `status = 'pending'` into the `submissions` table.
+4. Admin visits `/admin/submissions` to review pending items, then **Approve** (creates an unpublished `places` row) or **Reject** (with an optional note).
+
+### Setting up Turnstile
+
+1. Go to the [Cloudflare Turnstile dashboard](https://dash.cloudflare.com/?to=/:account/turnstile) and create a new widget (Managed is recommended).
+2. Copy the **Site key** and **Secret key**.
+3. Set them as Worker secrets:
+
+```bash
+cd workers
+wrangler secret put TURNSTILE_SITE_KEY    # paste the site key
+wrangler secret put TURNSTILE_SECRET_KEY  # paste the secret key
+```
+
+4. The Astro site reads `TURNSTILE_SITE_KEY` from the Worker environment at render time and injects it into the widget `data-sitekey` attribute. If the key is absent (local dev), the Turnstile check is skipped.
+
+### Local development (no Turnstile)
+
+When `TURNSTILE_SECRET_KEY` is not set in the Worker environment, the `/api/submit` endpoint skips token validation. This allows end-to-end testing without a real Turnstile widget.
 
 ---
 

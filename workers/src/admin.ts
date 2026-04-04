@@ -130,6 +130,7 @@ function navBar(): string {
   <nav>
     <a class="brand" href="/admin">Halal Directory</a>
     <a href="/admin/places">Places</a>
+    <a href="/admin/submissions">Submissions</a>
     <a href="/admin/users">Users</a>
     <a href="/admin/logout">Logout</a>
   </nav>`;
@@ -395,6 +396,10 @@ function dashboardPage(username: string): string {
       <a class="card" href="/admin/places" style="display:block;text-decoration:none;color:#111">
         <h2 style="font-size:1rem;margin-bottom:.25rem">Places</h2>
         <p style="font-size:.8rem;color:#666">Manage listings</p>
+      </a>
+      <a class="card" href="/admin/submissions" style="display:block;text-decoration:none;color:#111">
+        <h2 style="font-size:1rem;margin-bottom:.25rem">Submissions</h2>
+        <p style="font-size:.8rem;color:#666">Review public submissions</p>
       </a>
       <a class="card" href="/admin/users" style="display:block;text-decoration:none;color:#111">
         <h2 style="font-size:1rem;margin-bottom:.25rem">Users</h2>
@@ -1606,4 +1611,332 @@ export async function handleAdminPhotoMoveDown(
   }
 
   return redirect(`/admin/places/${id}/edit#photos`);
+}
+
+// ---------------------------------------------------------------------------
+// Route handlers — Submissions review queue
+// ---------------------------------------------------------------------------
+
+interface SubmissionRow {
+  id: number;
+  name: string;
+  description: string | null;
+  address: string | null;
+  city: string;
+  country: string;
+  phone: string | null;
+  website: string | null;
+  place_type: string;
+  category_id: number | null;
+  submitter_email: string | null;
+  status: string;
+  rejection_note: string | null;
+  created_at: string;
+  category_name?: string | null;
+}
+
+const SUBMISSIONS_PER_PAGE = 30;
+
+/** GET /admin/submissions */
+export async function handleAdminSubmissionsList(
+  request: IRequest,
+  env: Env,
+): Promise<Response> {
+  const url = new URL((request as Request).url);
+  const status = url.searchParams.get('status') ?? 'pending';
+  const currentPage = Math.max(1, parseInt(url.searchParams.get('page') ?? '1', 10));
+  const offset = (currentPage - 1) * SUBMISSIONS_PER_PAGE;
+  const flash = flashHtml(url);
+
+  const validStatuses = ['pending', 'approved', 'rejected'];
+  const safeStatus = validStatuses.includes(status) ? status : 'pending';
+
+  const [rowsResult, countResult] = await Promise.all([
+    env.DB.prepare(
+      `SELECT s.*, c.name AS category_name
+       FROM submissions s
+       LEFT JOIN categories c ON c.id = s.category_id
+       WHERE s.status = ?
+       ORDER BY s.created_at DESC
+       LIMIT ? OFFSET ?`,
+    )
+      .bind(safeStatus, SUBMISSIONS_PER_PAGE, offset)
+      .all<SubmissionRow>(),
+    env.DB.prepare(
+      `SELECT COUNT(*) AS total FROM submissions WHERE status = ?`,
+    )
+      .bind(safeStatus)
+      .first<{ total: number }>(),
+  ]);
+
+  const rows = rowsResult.results;
+  const total = countResult?.total ?? 0;
+  const totalPages = Math.ceil(total / SUBMISSIONS_PER_PAGE);
+
+  const statusTabs = ['pending', 'approved', 'rejected']
+    .map(
+      (s) =>
+        `<a href="/admin/submissions?status=${s}" class="btn btn-sm ${s === safeStatus ? 'btn-primary' : 'btn-secondary'}">${s.charAt(0).toUpperCase() + s.slice(1)}</a>`,
+    )
+    .join('');
+
+  const tableRows = rows.length === 0
+    ? `<tr><td colspan="8" class="empty">No ${safeStatus} submissions.</td></tr>`
+    : rows.map((s) => `
+      <tr>
+        <td>#${s.id}</td>
+        <td><strong>${esc(s.name)}</strong><br><span style="color:#666;font-size:.8rem">${esc(s.city)}, ${esc(s.country)}</span></td>
+        <td>${esc(s.place_type)}</td>
+        <td>${s.category_name ? esc(s.category_name) : '<span style="color:#aaa">—</span>'}</td>
+        <td>${s.submitter_email ? esc(s.submitter_email) : '<span style="color:#aaa">—</span>'}</td>
+        <td>${new Date(s.created_at).toLocaleDateString()}</td>
+        <td>
+          <span class="badge ${s.status === 'pending' ? 'badge-orange' : s.status === 'approved' ? 'badge-green' : 'badge-gray'}">${esc(s.status)}</span>
+          ${s.rejection_note ? `<br><span style="font-size:.75rem;color:#666">${esc(s.rejection_note)}</span>` : ''}
+        </td>
+        <td class="actions">
+          <a href="/admin/submissions/${s.id}" class="btn btn-sm btn-secondary">View</a>
+          ${s.status === 'pending' ? `
+            <form method="POST" action="/admin/submissions/${s.id}/approve" style="display:inline">
+              <button class="btn btn-sm btn-primary" onclick="return confirm('Approve this submission?')">Approve</button>
+            </form>
+            <form method="POST" action="/admin/submissions/${s.id}/reject" style="display:inline">
+              <input type="hidden" name="note" value="">
+              <button class="btn btn-sm btn-danger" onclick="return confirm('Reject this submission?')">Reject</button>
+            </form>
+          ` : ''}
+        </td>
+      </tr>
+    `).join('');
+
+  let paginationHtml = '';
+  if (totalPages > 1) {
+    const pages = [];
+    for (let i = 1; i <= totalPages; i++) {
+      pages.push(
+        i === currentPage
+          ? `<span class="current">${i}</span>`
+          : `<a href="/admin/submissions?status=${safeStatus}&page=${i}">${i}</a>`,
+      );
+    }
+    paginationHtml = `<div class="pagination">${pages.join('')}</div>`;
+  }
+
+  const body = `
+    <div class="table-header">
+      <h1>Submissions</h1>
+    </div>
+    ${flash}
+    <div class="filters" style="margin-bottom:1rem">
+      ${statusTabs}
+      <span style="color:#64748b;font-size:.85rem;margin-left:.5rem">${total} total</span>
+    </div>
+    <div class="card" style="padding:0">
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Name / Location</th>
+              <th>Type</th>
+              <th>Category</th>
+              <th>Email</th>
+              <th>Submitted</th>
+              <th>Status</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${tableRows}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    ${paginationHtml}
+  `;
+
+  return html(page('Submissions', body, TABLE_STYLES + FORM_STYLES));
+}
+
+/** GET /admin/submissions/:id */
+export async function handleAdminSubmissionView(
+  request: IRequest,
+  env: Env,
+): Promise<Response> {
+  const id = Number((request as any).params?.id);
+  if (!id) return redirect('/admin/submissions');
+
+  const sub = await env.DB.prepare(
+    `SELECT s.*, c.name AS category_name
+     FROM submissions s
+     LEFT JOIN categories c ON c.id = s.category_id
+     WHERE s.id = ?`,
+  )
+    .bind(id)
+    .first<SubmissionRow>();
+
+  if (!sub) return redirect('/admin/submissions?err=Submission+not+found');
+
+  const url = new URL((request as Request).url);
+  const flash = flashHtml(url);
+
+  const field = (label: string, value: string | null | undefined) =>
+    value ? `<div class="form-group"><label>${esc(label)}</label><div style="padding:.4rem 0;color:#111">${esc(value)}</div></div>` : '';
+
+  const approveRejectButtons = sub.status === 'pending' ? `
+    <div style="display:flex;gap:.75rem;margin-top:1.5rem">
+      <form method="POST" action="/admin/submissions/${sub.id}/approve">
+        <button class="btn btn-primary" onclick="return confirm('Approve and create place?')">Approve — Create Place</button>
+      </form>
+      <form method="POST" action="/admin/submissions/${sub.id}/reject">
+        <div style="display:flex;gap:.5rem;align-items:center">
+          <input type="text" name="note" placeholder="Rejection note (optional)" style="width:260px">
+          <button class="btn btn-danger" onclick="return confirm('Reject this submission?')">Reject</button>
+        </div>
+      </form>
+    </div>
+  ` : `<div style="margin-top:1.5rem"><span class="badge ${sub.status === 'approved' ? 'badge-green' : 'badge-gray'}" style="font-size:.9rem;padding:.35rem .75rem">${esc(sub.status)}</span>${sub.rejection_note ? `<span style="margin-left:.75rem;color:#666;font-size:.85rem">${esc(sub.rejection_note)}</span>` : ''}</div>`;
+
+  const body = `
+    <div style="display:flex;align-items:center;gap:1rem;margin-bottom:1.25rem">
+      <a href="/admin/submissions?status=${sub.status}" class="btn btn-secondary btn-sm">← Back</a>
+      <h1 style="margin:0">Submission #${sub.id}</h1>
+    </div>
+    ${flash}
+    <div class="card">
+      <div class="form-row">
+        ${field('Name', sub.name)}
+        ${field('Place Type', sub.place_type)}
+      </div>
+      <div class="form-group">
+        <label>Description</label>
+        <div style="padding:.4rem 0;color:#111;white-space:pre-wrap">${sub.description ? esc(sub.description) : '<span style="color:#aaa">—</span>'}</div>
+      </div>
+      <div class="form-row">
+        ${field('Address', sub.address)}
+        ${field('City', sub.city)}
+      </div>
+      <div class="form-row">
+        ${field('Country', sub.country)}
+        ${field('Category', sub.category_name ?? null)}
+      </div>
+      <div class="form-row">
+        ${field('Phone', sub.phone)}
+        ${field('Website', sub.website)}
+      </div>
+      ${field('Submitter Email', sub.submitter_email)}
+      <div class="form-group">
+        <label>Submitted</label>
+        <div style="padding:.4rem 0;color:#111">${new Date(sub.created_at).toLocaleString()}</div>
+      </div>
+      ${approveRejectButtons}
+    </div>
+  `;
+
+  return html(page(`Submission #${sub.id}`, body, FORM_STYLES));
+}
+
+/** POST /admin/submissions/:id/approve */
+export async function handleAdminSubmissionApprove(
+  request: IRequest,
+  env: Env,
+): Promise<Response> {
+  const id = Number((request as any).params?.id);
+  if (!id) return redirect('/admin/submissions');
+
+  const sub = await env.DB.prepare(
+    `SELECT * FROM submissions WHERE id = ? AND status = 'pending'`,
+  )
+    .bind(id)
+    .first<SubmissionRow>();
+
+  if (!sub) {
+    return redirect(
+      `/admin/submissions?err=${encodeURIComponent('Submission not found or already processed.')}`,
+    );
+  }
+
+  // Generate a unique slug from the name
+  const baseSlug = sub.name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 60);
+
+  let slug = baseSlug;
+  let suffix = 1;
+  while (true) {
+    const existing = await env.DB.prepare(`SELECT id FROM places WHERE slug = ?`)
+      .bind(slug)
+      .first<{ id: number }>();
+    if (!existing) break;
+    slug = `${baseSlug}-${suffix++}`;
+  }
+
+  await env.DB.batch([
+    env.DB.prepare(
+      `INSERT INTO places
+         (slug, name, description, place_type, category_id, address, city, country,
+          phone, website, halal_certified, published)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0)`,
+    ).bind(
+      slug,
+      sub.name,
+      sub.description ?? null,
+      sub.place_type ?? 'restaurant',
+      sub.category_id ?? null,
+      sub.address ?? null,
+      sub.city,
+      sub.country,
+      sub.phone ?? null,
+      sub.website ?? null,
+    ),
+    env.DB.prepare(
+      `UPDATE submissions SET status = 'approved' WHERE id = ?`,
+    ).bind(id),
+  ]);
+
+  return redirect(
+    `/admin/submissions?status=pending&ok=${encodeURIComponent(`Submission approved. Place "${sub.name}" created (unpublished).`)}`,
+  );
+}
+
+/** POST /admin/submissions/:id/reject */
+export async function handleAdminSubmissionReject(
+  request: IRequest,
+  env: Env,
+): Promise<Response> {
+  const id = Number((request as any).params?.id);
+  if (!id) return redirect('/admin/submissions');
+
+  const sub = await env.DB.prepare(
+    `SELECT id, name FROM submissions WHERE id = ? AND status = 'pending'`,
+  )
+    .bind(id)
+    .first<{ id: number; name: string }>();
+
+  if (!sub) {
+    return redirect(
+      `/admin/submissions?err=${encodeURIComponent('Submission not found or already processed.')}`,
+    );
+  }
+
+  let note: string | null = null;
+  try {
+    const text = await (request as Request).text();
+    const params = new URLSearchParams(text);
+    note = params.get('note')?.trim() || null;
+  } catch {
+    // ignore parse errors
+  }
+
+  await env.DB.prepare(
+    `UPDATE submissions SET status = 'rejected', rejection_note = ? WHERE id = ?`,
+  )
+    .bind(note, id)
+    .run();
+
+  return redirect(
+    `/admin/submissions?status=pending&ok=${encodeURIComponent(`Submission "${sub.name}" rejected.`)}`,
+  );
 }

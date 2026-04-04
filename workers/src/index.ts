@@ -5,7 +5,8 @@
  *   GET  /api/health            → liveness check
  *   GET  /api/places            → list / search places
  *   GET  /api/places/:slug      → single place detail
- *   POST /api/submissions       → public listing submission form
+ *   POST /api/submit            → public listing submission form (with Turnstile)
+ *   POST /api/submissions       → public listing submission form (legacy, no Turnstile)
  *
  * Auth routes (session):
  *   POST /api/auth/login        → username+password → set session cookie
@@ -46,6 +47,10 @@ import {
   handleAdminPlacesList,
   handleAdminPlaceTogglePublished,
   handleAdminPlaceUpdate,
+  handleAdminSubmissionsList,
+  handleAdminSubmissionView,
+  handleAdminSubmissionApprove,
+  handleAdminSubmissionReject,
   handleAdminUserCreate,
   handleAdminUserDelete,
   handleAdminUserNew,
@@ -58,6 +63,8 @@ export interface Env {
   CLOUDINARY_API_KEY: string;
   CLOUDINARY_API_SECRET: string;
   ADMIN_SESSION_SECRET: string;
+  TURNSTILE_SITE_KEY: string;
+  TURNSTILE_SECRET_KEY: string;
 }
 
 const SESSION_DURATION_DAYS = 7;
@@ -103,6 +110,15 @@ router.post('/admin/places/:id/photos/upload', handleAdminPhotoUpload);
 router.post('/admin/places/:id/photos/:photoId/delete', handleAdminPhotoDelete);
 router.post('/admin/places/:id/photos/:photoId/up', handleAdminPhotoMoveUp);
 router.post('/admin/places/:id/photos/:photoId/down', handleAdminPhotoMoveDown);
+
+// ---------------------------------------------------------------------------
+// Admin HTML routes — Submissions review queue
+// Note: /admin/submissions/:id routes before /admin/submissions
+// ---------------------------------------------------------------------------
+router.get('/admin/submissions', handleAdminSubmissionsList);
+router.get('/admin/submissions/:id', handleAdminSubmissionView);
+router.post('/admin/submissions/:id/approve', handleAdminSubmissionApprove);
+router.post('/admin/submissions/:id/reject', handleAdminSubmissionReject);
 
 // ---------------------------------------------------------------------------
 // Admin HTML routes — Users
@@ -435,7 +451,84 @@ router.delete('/api/places/:id', async (request, env: Env) => {
 });
 
 // ---------------------------------------------------------------------------
-// Submissions — public
+// Submit — public listing submission form with Turnstile validation
+// ---------------------------------------------------------------------------
+router.post('/api/submit', async (request, env: Env) => {
+  let body: {
+    name?: string;
+    description?: string;
+    address?: string;
+    city?: string;
+    country?: string;
+    phone?: string;
+    website?: string;
+    place_type?: string;
+    category_id?: number | string;
+    submitter_email?: string;
+    turnstile_token?: string;
+  };
+  try {
+    body = await request.json();
+  } catch {
+    return Response.json({ error: 'Invalid JSON' }, { status: 400 });
+  }
+
+  const { name, city, country, turnstile_token } = body ?? {};
+  if (!name || !city || !country) {
+    return Response.json(
+      { error: 'name, city, and country are required' },
+      { status: 400 },
+    );
+  }
+
+  // Validate Turnstile token (skip if secret key not configured, e.g. local dev)
+  if (env.TURNSTILE_SECRET_KEY) {
+    if (!turnstile_token) {
+      return Response.json({ error: 'Turnstile token is required' }, { status: 400 });
+    }
+    const ip = request.headers.get('CF-Connecting-IP') ?? '';
+    const verifyForm = new URLSearchParams({
+      secret: env.TURNSTILE_SECRET_KEY,
+      response: turnstile_token,
+      remoteip: ip,
+    });
+    const verifyRes = await fetch(
+      'https://challenges.cloudflare.com/turnstile/v0/siteverify',
+      { method: 'POST', body: verifyForm },
+    );
+    const verifyData = (await verifyRes.json()) as { success: boolean; 'error-codes'?: string[] };
+    if (!verifyData.success) {
+      return Response.json({ error: 'Turnstile verification failed. Please try again.' }, { status: 400 });
+    }
+  }
+
+  const place_type = body.place_type === 'prayer' ? 'prayer' : 'restaurant';
+  const category_id = body.category_id ? Number(body.category_id) : null;
+
+  await env.DB.prepare(
+    `INSERT INTO submissions
+       (name, description, address, city, country, phone, website, place_type, category_id, submitter_email)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  )
+    .bind(
+      name,
+      body.description ?? null,
+      body.address ?? null,
+      city,
+      country,
+      body.phone ?? null,
+      body.website ?? null,
+      place_type,
+      category_id,
+      body.submitter_email ?? null,
+    )
+    .run();
+
+  return Response.json({ ok: true }, { status: 201 });
+});
+
+// ---------------------------------------------------------------------------
+// Submissions — public (legacy, no Turnstile)
 // ---------------------------------------------------------------------------
 router.post('/api/submissions', async (request, env: Env) => {
   let body: {
