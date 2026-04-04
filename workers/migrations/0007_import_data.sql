@@ -2,8 +2,6 @@
 -- Generated: 2026-04-04T14:10:13.649Z
 -- Apply: cd workers && npx wrangler d1 execute halal-directory --remote --file=../workers/migrations/0007_import_data.sql
 
-BEGIN TRANSACTION;
-
 -- ── Restaurants (197 rows) ──────────────────────────────────────────
 
 INSERT OR IGNORE INTO places (slug, name, description, address, city, country, lat, lng, phone, website, halal_certified, place_type, category_id, published, created_at) VALUES ('hjh-maimunah-1', 'Hjh Maimunah', 'Established Malay-Indonesian restaurant serving traditional nasi padang. Awarded Michelin Bib Gourmand recognition for eight consecutive years. Features beef rendang, sotong hitam, and assorted curry dishes with MUIS halal certification.', '11 Jalan Pisang, Singapore 199078', 'Singapore', 'Singapore', 1.2889000, 103.8467000, '+65 6297 4294', 'http://www.hjhmaimunah.com', 1, 'restaurant', (SELECT id FROM categories WHERE slug = 'restaurant' LIMIT 1), 1, '2025-10-27T14:01:47.211Z');
@@ -387,8 +385,6 @@ INSERT OR IGNORE INTO places (slug, name, description, address, city, country, l
 INSERT OR IGNORE INTO places (slug, name, description, address, city, country, lat, lng, halal_certified, place_type, category_id, published, created_at) VALUES ('kowloon-masjid-and-islamic-centre-p8', 'Kowloon Masjid and Islamic Centre', 'Largest mosque in Hong Kong, rebuilt in 1984. Located on Nathan Road in Tsim Sha Tsui, serves the Muslim community with prayer facilities and educational programs. Facilities: Ablution facilities, Separate prayer areas, Library, Community hall.', '105 Nathan Road, Tsim Sha Tsui, Kowloon, Hong Kong', 'Hong Kong', 'China', 22.2978000, 114.1722000, 1, 'prayer_room', (SELECT id FROM categories WHERE slug = 'other' LIMIT 1), 1, '2025-10-27T14:01:47.211Z');
 INSERT OR IGNORE INTO places (slug, name, description, address, city, country, lat, lng, halal_certified, place_type, category_id, published, created_at) VALUES ('masjid-moulana-mohamed-ali-p9', 'Masjid Moulana Mohamed Ali', 'Masjid Moulana Mohamed Ali (Moulana Mohamed Ali Mosque) sometimes shortened to Moulana Mohd Ali is an underground mosque in Raffles Place, Singapore. Formerly a pair of shophouses located along Market Street that were converted into prayer halls, the mosque is now located in the basement of UOB Plaza One. It is the only underground mosque in Singapore. ', '80 Raffles Pl, #B1-01 I UOB Plaza, Singapore 048624', 'Singapore', 'Singapore', 1.2855981, 103.8500704, 1, 'mosque', (SELECT id FROM categories WHERE slug = 'mosque' LIMIT 1), 1, '2025-10-27T17:37:14.121Z');
 INSERT OR IGNORE INTO places (slug, name, description, address, city, country, lat, lng, halal_certified, place_type, category_id, published, created_at) VALUES ('masjid-al-muttaqin-p10', 'Masjid Al-Muttaqin', 'Masjid Al-Muttaqin (Al-Muttaqin Mosque) is a community-focused mosque in Ang Mo Kio, Singapore. The chosen name Al-Muttaqin refers to the pious people who are ever aware of God the Almighty. ', '5140 Ang Mo Kio Ave 6, S 569844', 'Singapore', 'Singapore', 1.3702576, 103.8460620, 1, 'mosque', (SELECT id FROM categories WHERE slug = 'mosque' LIMIT 1), 1, '2026-01-24T12:05:38.587Z');
-
-COMMIT;
 
 -- Rebuild FTS5 index
 INSERT INTO places_fts(places_fts) VALUES('rebuild');
