@@ -1,0 +1,90 @@
+---
+export interface Props {
+  slug: string;
+  name: string;
+  city: string;
+  country: string;
+  halal_certified: number | boolean;
+  category_name?: string;
+}
+
+const { slug, name, city, country, halal_certified, category_name } = Astro.props;
+---
+
+<a class="place-card" href={`/places/${slug}`}>
+  <div class="place-card__header">
+    <span class="place-card__name">{name}</span>
+    {halal_certified ? (
+      <span class="place-card__badge place-card__badge--certified" title="Halal certified">✓ Certified</span>
+    ) : (
+      <span class="place-card__badge place-card__badge--halal">Halal</span>
+    )}
+  </div>
+  <div class="place-card__meta">
+    {category_name && <span class="place-card__category">{category_name}</span>}
+    <span class="place-card__location">📍 {city}, {country}</span>
+  </div>
+</a>
+
+<style>
+  .place-card {
+    display: block;
+    background: #fff;
+    border: 1px solid #e5e5e5;
+    border-radius: 8px;
+    padding: 1rem 1.25rem;
+    transition: box-shadow 0.15s, border-color 0.15s;
+  }
+  .place-card:hover {
+    box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+    border-color: #15803d;
+  }
+
+  .place-card__header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .place-card__name {
+    font-weight: 600;
+    font-size: 1rem;
+    color: #1a1a1a;
+    flex: 1;
+  }
+
+  .place-card__badge {
+    flex-shrink: 0;
+    font-size: 0.7rem;
+    font-weight: 600;
+    padding: 0.2rem 0.5rem;
+    border-radius: 999px;
+    white-space: nowrap;
+  }
+  .place-card__badge--certified {
+    background: #dcfce7;
+    color: #15803d;
+  }
+  .place-card__badge--halal {
+    background: #fef9c3;
+    color: #854d0e;
+  }
+
+  .place-card__meta {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    font-size: 0.85rem;
+    color: #666;
+    flex-wrap: wrap;
+  }
+
+  .place-card__category {
+    background: #f3f4f6;
+    border-radius: 4px;
+    padding: 0.1rem 0.4rem;
+    color: #374151;
+  }
+</style>

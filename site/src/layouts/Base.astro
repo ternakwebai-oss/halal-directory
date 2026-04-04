@@ -1,0 +1,120 @@
+---
+export interface Props {
+  title: string;
+  description?: string;
+  canonical?: string;
+  ogTitle?: string;
+  ogDescription?: string;
+  ogImage?: string;
+}
+
+const {
+  title,
+  description = 'Find halal-certified restaurants, cafés, butchers, and more near you.',
+  canonical = Astro.url.href,
+  ogTitle = title,
+  ogDescription = description,
+  ogImage = '/og-default.png',
+} = Astro.props;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="generator" content={Astro.generator} />
+
+    <!-- Primary SEO -->
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href={canonical} />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" href="/favicon.ico" />
+
+    <!-- Open Graph -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content={canonical} />
+    <meta property="og:title" content={ogTitle} />
+    <meta property="og:description" content={ogDescription} />
+    <meta property="og:image" content={new URL(ogImage, Astro.site).href} />
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={ogTitle} />
+    <meta name="twitter:description" content={ogDescription} />
+    <meta name="twitter:image" content={new URL(ogImage, Astro.site).href} />
+
+    <!-- Google AdSense — replace ca-pub-XXXXXXXXXXXXXXXX with real publisher ID -->
+    <!-- <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-XXXXXXXXXXXXXXXX" crossorigin="anonymous"></script> -->
+
+    <style>
+      *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+      body {
+        font-family: system-ui, -apple-system, sans-serif;
+        color: #1a1a1a;
+        background: #fafaf8;
+        line-height: 1.6;
+      }
+      a { color: inherit; text-decoration: none; }
+      img { max-width: 100%; display: block; }
+
+      header {
+        background: #fff;
+        border-bottom: 1px solid #e5e5e5;
+        padding: 0 1.5rem;
+      }
+      .header-inner {
+        max-width: 1200px;
+        margin: 0 auto;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        height: 3.5rem;
+      }
+      .logo {
+        font-weight: 700;
+        font-size: 1.2rem;
+        color: #15803d;
+      }
+      nav a {
+        margin-left: 1.5rem;
+        font-size: 0.9rem;
+        color: #555;
+      }
+      nav a:hover { color: #15803d; }
+
+      main { min-height: calc(100vh - 7rem); }
+
+      footer {
+        background: #1a1a1a;
+        color: #aaa;
+        text-align: center;
+        padding: 1.5rem;
+        font-size: 0.85rem;
+      }
+      footer a { color: #ccc; }
+      footer a:hover { color: #fff; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="header-inner">
+        <a class="logo" href="/">🕌 Halal Directory</a>
+        <nav>
+          <a href="/categories">Categories</a>
+          <a href="/countries">Countries</a>
+          <a href="/submit">Add a listing</a>
+        </nav>
+      </div>
+    </header>
+
+    <main>
+      <slot />
+    </main>
+
+    <footer>
+      <p>&copy; {new Date().getFullYear()} Halal Directory &mdash; <a href="/about">About</a> &middot; <a href="/privacy">Privacy</a></p>
+    </footer>
+  </body>
+</html>
