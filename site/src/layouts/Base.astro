@@ -45,6 +45,9 @@ const {
     <meta name="twitter:description" content={ogDescription} />
     <meta name="twitter:image" content={new URL(ogImage, Astro.site).href} />
 
+    <!-- Structured data / extra head content from pages -->
+    <slot name="head" />
+
     <!-- Google AdSense — replace ca-pub-XXXXXXXXXXXXXXXX with real publisher ID -->
     <!-- <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-XXXXXXXXXXXXXXXX" crossorigin="anonymous"></script> -->
 

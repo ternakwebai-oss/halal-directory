@@ -1,0 +1,427 @@
+---
+import Base from '../../layouts/Base.astro';
+
+interface Place {
+  id: number;
+  slug: string;
+  name: string;
+  description: string | null;
+  address: string | null;
+  city: string;
+  country: string;
+  lat: number | null;
+  lng: number | null;
+  phone: string | null;
+  website: string | null;
+  hours: string | null;
+  halal_certified: number;
+  category_name: string | null;
+  category_slug: string | null;
+}
+
+interface Photo {
+  cloudinary_public_id: string;
+  caption: string | null;
+}
+
+const { slug } = Astro.params as { slug: string };
+
+const runtime = Astro.locals.runtime;
+const db = runtime?.env?.DB as D1Database | undefined;
+const cloudName: string = (runtime?.env as Record<string, string> | undefined)?.CLOUDINARY_CLOUD_NAME ?? 'halal-directory';
+
+let place: Place | null = null;
+let photos: Photo[] = [];
+
+if (db) {
+  const [placeResult, photosResult] = await Promise.all([
+    db.prepare(`
+      SELECT p.id, p.slug, p.name, p.description, p.address,
+             p.city, p.country, p.lat, p.lng, p.phone, p.website,
+             p.hours, p.halal_certified,
+             c.name AS category_name, c.slug AS category_slug
+      FROM places p
+      LEFT JOIN categories c ON p.category_id = c.id
+      WHERE p.slug = ? AND p.published = 1
+      LIMIT 1
+    `).bind(slug).first<Place>(),
+
+    db.prepare(`
+      SELECT cloudinary_public_id, caption
+      FROM photos
+      WHERE place_id = (SELECT id FROM places WHERE slug = ? LIMIT 1)
+      ORDER BY sort_order ASC
+    `).bind(slug).all<Photo>(),
+  ]);
+
+  place = placeResult ?? null;
+  photos = photosResult.results;
+}
+
+if (!place) {
+  return Astro.redirect('/404', 404);
+}
+
+// Cloudinary URL helper — auto format + quality, capped at 800 px wide
+function cloudinaryUrl(publicId: string, width = 800): string {
+  return `https://res.cloudinary.com/${cloudName}/image/upload/f_auto,q_auto,w_${width}/${publicId}`;
+}
+
+const firstPhoto = photos[0] ? cloudinaryUrl(photos[0].cloudinary_public_id) : undefined;
+const ogImage = firstPhoto ?? '/og-default.png';
+
+// Slugify helper (matches DB query pattern in other pages)
+function toSlug(str: string): string {
+  return str.toLowerCase().replace(/\s+/g, '-');
+}
+
+const countrySlug = toSlug(place.country);
+const citySlug = toSlug(place.city);
+
+const canonicalUrl = new URL(`/places/${place.slug}`, Astro.site).href;
+
+// SEO title: "{Name} — Halal {Category} in {City}, {Country} | halal.nusba.com"
+const categoryLabel = place.category_name ?? 'Place';
+const seoTitle = `${place.name} — Halal ${categoryLabel} in ${place.city}, ${place.country} | halal.nusba.com`;
+
+// Meta description: 150–160 chars
+const rawDesc = place.description
+  ? place.description.slice(0, 120).trimEnd()
+  : `${place.halal_certified ? 'Halal certified' : 'Halal'} ${categoryLabel.toLowerCase()} in ${place.city}, ${place.country}.`;
+const metaDesc = `${rawDesc} — Halal ${categoryLabel} in ${place.city}, ${place.country}.`.slice(0, 160);
+
+// Parse opening hours JSON → Schema.org openingHours array
+// DB format: { "mon": "09:00-22:00", "tue": "09:00-22:00", ... }
+const dayMap: Record<string, string> = {
+  mon: 'Mo', tue: 'Tu', wed: 'We', thu: 'Th', fri: 'Fr', sat: 'Sa', sun: 'Su',
+};
+let openingHoursSpec: string[] = [];
+if (place.hours) {
+  try {
+    const hoursObj = JSON.parse(place.hours) as Record<string, string>;
+    for (const [day, range] of Object.entries(hoursObj)) {
+      if (dayMap[day] && range) {
+        openingHoursSpec.push(`${dayMap[day]} ${range}`);
+      }
+    }
+  } catch {
+    // ignore malformed JSON
+  }
+}
+
+// Schema.org LocalBusiness JSON-LD
+const localBusinessSchema = {
+  '@context': 'https://schema.org',
+  '@type': 'LocalBusiness',
+  name: place.name,
+  description: place.description ?? undefined,
+  telephone: place.phone ?? undefined,
+  url: place.website ?? canonicalUrl,
+  image: firstPhoto ?? undefined,
+  address: {
+    '@type': 'PostalAddress',
+    streetAddress: place.address ?? undefined,
+    addressLocality: place.city,
+    addressCountry: place.country,
+  },
+  ...(place.lat !== null && place.lng !== null
+    ? { geo: { '@type': 'GeoCoordinates', latitude: place.lat, longitude: place.lng } }
+    : {}),
+  ...(openingHoursSpec.length > 0 ? { openingHours: openingHoursSpec } : {}),
+};
+
+// Breadcrumb JSON-LD: Home > Country > City > {Name}
+const breadcrumbSchema = {
+  '@context': 'https://schema.org',
+  '@type': 'BreadcrumbList',
+  itemListElement: [
+    { '@type': 'ListItem', position: 1, name: 'Home', item: Astro.site?.href },
+    { '@type': 'ListItem', position: 2, name: place.country, item: new URL(`/countries/${countrySlug}`, Astro.site).href },
+    { '@type': 'ListItem', position: 3, name: place.city, item: new URL(`/countries/${countrySlug}/${citySlug}`, Astro.site).href },
+    { '@type': 'ListItem', position: 4, name: place.name, item: canonicalUrl },
+  ],
+};
+
+const localBusinessJson = JSON.stringify(localBusinessSchema);
+const breadcrumbJson = JSON.stringify(breadcrumbSchema);
+---
+
+<Base
+  title={seoTitle}
+  description={metaDesc}
+  canonical={canonicalUrl}
+  ogTitle={seoTitle}
+  ogDescription={metaDesc}
+  ogImage={ogImage}
+>
+  <script type="application/ld+json" set:html={localBusinessJson} slot="head" />
+  <script type="application/ld+json" set:html={breadcrumbJson} slot="head" />
+
+  <div class="container">
+    <!-- Breadcrumb -->
+    <nav class="breadcrumb" aria-label="Breadcrumb">
+      <a href="/">Home</a>
+      <span aria-hidden="true">›</span>
+      <a href={`/countries/${countrySlug}`}>{place.country}</a>
+      <span aria-hidden="true">›</span>
+      <a href={`/countries/${countrySlug}/${citySlug}`}>{place.city}</a>
+      <span aria-hidden="true">›</span>
+      <span aria-current="page">{place.name}</span>
+    </nav>
+
+    <!-- Header -->
+    <header class="place-header">
+      <div class="place-header__meta">
+        {place.category_name && (
+          <a class="tag tag--category" href={`/categories/${place.category_slug}`}>
+            {place.category_name}
+          </a>
+        )}
+        {place.halal_certified ? (
+          <span class="tag tag--certified">✓ Halal Certified</span>
+        ) : (
+          <span class="tag tag--halal">Halal</span>
+        )}
+      </div>
+      <h1>{place.name}</h1>
+      <p class="place-header__location">📍 {place.city}, {place.country}</p>
+    </header>
+
+    <div class="place-body">
+      <!-- Photos -->
+      {photos.length > 0 && (
+        <section class="photos" aria-label="Photos">
+          <div class="photos__grid">
+            {photos.map((photo, i) => (
+              <img
+                src={cloudinaryUrl(photo.cloudinary_public_id, i === 0 ? 1200 : 600)}
+                alt={photo.caption ?? place.name}
+                class={i === 0 ? 'photos__main' : 'photos__thumb'}
+                loading={i === 0 ? 'eager' : 'lazy'}
+                width={i === 0 ? 1200 : 600}
+                height={i === 0 ? 675 : 338}
+              />
+            ))}
+          </div>
+        </section>
+      )}
+
+      <!-- Main info -->
+      <section class="info-section">
+        {place.description && (
+          <div class="place-description">
+            <p>{place.description}</p>
+          </div>
+        )}
+
+        <dl class="details-list">
+          {place.address && (
+            <>
+              <dt>Address</dt>
+              <dd>
+                <address>{place.address}, {place.city}, {place.country}</address>
+              </dd>
+            </>
+          )}
+
+          {place.phone && (
+            <>
+              <dt>Phone</dt>
+              <dd><a href={`tel:${place.phone}`}>{place.phone}</a></dd>
+            </>
+          )}
+
+          {place.website && (
+            <>
+              <dt>Website</dt>
+              <dd>
+                <a href={place.website} target="_blank" rel="noopener noreferrer">
+                  {new URL(place.website).hostname}
+                </a>
+              </dd>
+            </>
+          )}
+
+          {openingHoursSpec.length > 0 && (
+            <>
+              <dt>Hours</dt>
+              <dd>
+                <ul class="hours-list">
+                  {openingHoursSpec.map((spec) => (
+                    <li>{spec}</li>
+                  ))}
+                </ul>
+              </dd>
+            </>
+          )}
+        </dl>
+      </section>
+
+      <!-- AdSense slot — replace data-ad-client / data-ad-slot with real values -->
+      <div class="adsense-wrap" aria-hidden="true">
+        <ins
+          class="adsbygoogle"
+          style="display:block"
+          data-ad-client="ca-pub-XXXXXXXXXXXXXXXX"
+          data-ad-slot="0000000000"
+          data-ad-format="auto"
+          data-full-width-responsive="true"
+        ></ins>
+        <!-- <script>(adsbygoogle = window.adsbygoogle || []).push({});<\/script> -->
+      </div>
+    </div>
+  </div>
+</Base>
+
+<style>
+  .container {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 2rem 1.5rem 4rem;
+  }
+
+  /* Breadcrumb */
+  .breadcrumb {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    font-size: 0.85rem;
+    color: #666;
+    margin-bottom: 1.5rem;
+  }
+  .breadcrumb a { color: #15803d; }
+  .breadcrumb a:hover { text-decoration: underline; }
+
+  /* Place header */
+  .place-header { margin-bottom: 1.5rem; }
+
+  .place-header__meta {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    margin-bottom: 0.75rem;
+  }
+
+  .tag {
+    display: inline-block;
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 0.25rem 0.6rem;
+    border-radius: 999px;
+  }
+  .tag--category {
+    background: #f3f4f6;
+    color: #374151;
+    border: 1px solid #d1d5db;
+  }
+  .tag--category:hover { border-color: #15803d; color: #15803d; }
+  .tag--certified { background: #dcfce7; color: #15803d; }
+  .tag--halal { background: #fef9c3; color: #854d0e; }
+
+  h1 {
+    font-size: clamp(1.6rem, 4vw, 2.2rem);
+    font-weight: 800;
+    line-height: 1.2;
+    margin-bottom: 0.4rem;
+    color: #1a1a1a;
+  }
+
+  .place-header__location {
+    font-size: 1rem;
+    color: #555;
+  }
+
+  /* Photos */
+  .photos { margin-bottom: 2rem; }
+
+  .photos__grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.5rem;
+  }
+
+  .photos__main {
+    grid-column: 1 / -1;
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    object-fit: cover;
+    border-radius: 8px;
+  }
+
+  .photos__thumb {
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    object-fit: cover;
+    border-radius: 6px;
+  }
+
+  /* Place body */
+  .place-body { display: flex; flex-direction: column; gap: 2rem; }
+
+  /* Description */
+  .place-description {
+    font-size: 1.05rem;
+    line-height: 1.7;
+    color: #333;
+  }
+
+  /* Details */
+  .details-list {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    gap: 0.5rem 1.5rem;
+    font-size: 0.95rem;
+    background: #fff;
+    border: 1px solid #e5e5e5;
+    border-radius: 8px;
+    padding: 1.25rem 1.5rem;
+  }
+
+  .details-list dt {
+    font-weight: 600;
+    color: #555;
+    white-space: nowrap;
+    align-self: start;
+    padding-top: 0.1rem;
+  }
+
+  .details-list dd {
+    color: #1a1a1a;
+  }
+
+  .details-list dd address { font-style: normal; }
+
+  .details-list a { color: #15803d; }
+  .details-list a:hover { text-decoration: underline; }
+
+  .hours-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem 1rem;
+  }
+
+  .hours-list li { font-size: 0.9rem; color: #444; }
+
+  /* AdSense */
+  .adsense-wrap {
+    min-height: 90px;
+    background: #f9f9f9;
+    border: 1px dashed #ddd;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  @media (max-width: 600px) {
+    .photos__grid { grid-template-columns: 1fr; }
+    .photos__thumb { display: none; }
+    .details-list { grid-template-columns: 1fr; }
+    .details-list dt { margin-top: 0.5rem; }
+    .details-list dt:first-child { margin-top: 0; }
+  }
+</style>
