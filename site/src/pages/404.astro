@@ -1,0 +1,65 @@
+---
+import Base from '../layouts/Base.astro';
+---
+
+<Base title="Page Not Found — Halal Directory" description="The page you are looking for does not exist.">
+  <style>
+    .not-found {
+      max-width: 600px;
+      margin: 6rem auto;
+      padding: 0 1.5rem;
+      text-align: center;
+    }
+    .not-found h1 {
+      font-size: 5rem;
+      font-weight: 800;
+      color: #15803d;
+      line-height: 1;
+      margin-bottom: 0.5rem;
+    }
+    .not-found h2 {
+      font-size: 1.5rem;
+      font-weight: 600;
+      margin-bottom: 1rem;
+      color: #1a1a1a;
+    }
+    .not-found p {
+      color: #555;
+      margin-bottom: 2rem;
+    }
+    .actions {
+      display: flex;
+      gap: 1rem;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+    .btn {
+      display: inline-block;
+      padding: 0.65rem 1.5rem;
+      border-radius: 6px;
+      font-size: 0.95rem;
+      font-weight: 500;
+      text-decoration: none;
+    }
+    .btn-primary {
+      background: #15803d;
+      color: #fff;
+    }
+    .btn-primary:hover { background: #166534; }
+    .btn-secondary {
+      border: 1px solid #d1d5db;
+      color: #374151;
+    }
+    .btn-secondary:hover { background: #f3f4f6; }
+  </style>
+
+  <div class="not-found">
+    <h1>404</h1>
+    <h2>Page not found</h2>
+    <p>The page you are looking for doesn't exist or has been moved.</p>
+    <div class="actions">
+      <a href="/" class="btn btn-primary">Go to homepage</a>
+      <a href="/search" class="btn btn-secondary">Search listings</a>
+    </div>
+  </div>
+</Base>
