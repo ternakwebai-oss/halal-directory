@@ -1,5 +1,5 @@
 -- Halal Directory — D1 initial schema
--- Apply: wrangler d1 execute halal-directory --file=migrations/0001_initial_schema.sql
+-- Apply: wrangler d1 migrations apply halal-directory --local
 
 CREATE TABLE IF NOT EXISTS categories (
   id         INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -26,12 +26,17 @@ CREATE TABLE IF NOT EXISTS places (
   created_at       TEXT    NOT NULL DEFAULT (datetime('now'))
 );
 
+CREATE INDEX IF NOT EXISTS idx_places_city       ON places(city);
 CREATE INDEX IF NOT EXISTS idx_places_country    ON places(country);
 CREATE INDEX IF NOT EXISTS idx_places_category   ON places(category_id);
 CREATE INDEX IF NOT EXISTS idx_places_published  ON places(published);
 
--- Full-text search (FTS5) — Week 4 upgrade
--- CREATE VIRTUAL TABLE places_fts USING fts5(name, description, city, content='places', content_rowid='id');
+-- Full-text search via FTS5
+CREATE VIRTUAL TABLE IF NOT EXISTS places_fts USING fts5(
+  name, description, city,
+  content='places',
+  content_rowid='id'
+);
 
 CREATE TABLE IF NOT EXISTS photos (
   id                   INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -70,6 +75,8 @@ CREATE TABLE IF NOT EXISTS sessions (
   expires_at  TEXT    NOT NULL
 );
 
+CREATE INDEX IF NOT EXISTS idx_sessions_token   ON sessions(token_hash);
+
 CREATE TABLE IF NOT EXISTS api_keys (
   id         INTEGER PRIMARY KEY AUTOINCREMENT,
   label      TEXT NOT NULL,
@@ -78,15 +85,4 @@ CREATE TABLE IF NOT EXISTS api_keys (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
--- Seed categories
-INSERT OR IGNORE INTO categories (slug, name) VALUES
-  ('restaurant',   'Restaurant'),
-  ('cafe',         'Café'),
-  ('butcher',      'Butcher / Meat Shop'),
-  ('grocery',      'Grocery / Supermarket'),
-  ('bakery',       'Bakery'),
-  ('food-truck',   'Food Truck'),
-  ('catering',     'Catering'),
-  ('hotel',        'Hotel'),
-  ('mosque',       'Mosque'),
-  ('other',        'Other');
+CREATE INDEX IF NOT EXISTS idx_api_keys_hash    ON api_keys(key_hash);

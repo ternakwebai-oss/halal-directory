@@ -7,6 +7,7 @@ compatibility_flags = ["nodejs_compat"]
 binding = "DB"
 database_name = "halal-directory"
 database_id = "placeholder-replace-with-real-id"
+migrations_dir = "migrations"
 
 [vars]
 # Non-secret vars go here. Secrets are set via `wrangler secret put`.
