@@ -160,9 +160,34 @@ When `TURNSTILE_SECRET_KEY` is not set in the Worker environment, the `/api/subm
 The Worker supports two auth methods:
 
 - **Admin session** — cookie-based (`HttpOnly`, `SameSite=Strict`, 7-day expiry). Set by `POST /admin/login` or `POST /api/auth/login`.
-- **API key** — `Authorization: Bearer <key>` header. Keys are stored hashed in the `api_keys` table with comma-separated scopes (`read`, `write`).
+- **API key** — `Authorization: Bearer <key>` header. Keys are stored hashed (SHA-256) in the `api_keys` table with comma-separated scopes (`places:read`, `places:write`).
 
 Password hashing uses PBKDF2-SHA256 (100 000 iterations, 32-byte key) via the Web Crypto API.
+
+### Creating and using API keys
+
+1. Log in to the admin panel and navigate to **API Keys** (`/admin/api-keys`).
+2. Click **+ New API Key**, enter a label (e.g. `content-agent`), and select scopes.
+3. Copy the raw key immediately — it is shown **once only** and is never stored in plain text.
+4. Use the key in API requests via the `Authorization` header:
+
+```bash
+# Create a place
+curl -X POST https://<your-worker>/api/places \
+  -H "Authorization: Bearer <api_key>" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Zaytoun","slug":"zaytoun","city":"London","country":"GB","place_type":"restaurant","published":true}'
+
+# Update a place
+curl -X PATCH https://<your-worker>/api/places/42 \
+  -H "Authorization: Bearer <api_key>" \
+  -H "Content-Type: application/json" \
+  -d '{"halal_certified":true}'
+```
+
+An invalid or revoked key returns `401 Unauthorized`. A key without the `places:write` scope returns `403 Forbidden`.
+
+To revoke a key, click **Revoke** on the API Keys page. The key is deleted immediately.
 
 ---
 

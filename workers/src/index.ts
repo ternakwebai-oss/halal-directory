@@ -17,6 +17,12 @@
  *   POST   /api/places          → create place
  *   PATCH  /api/places/:id      → update place
  *   DELETE /api/places/:id      → delete place (admin session only)
+ *
+ * Admin HTML routes — API Keys:
+ *   GET  /admin/api-keys         → list keys
+ *   GET  /admin/api-keys/new     → create form
+ *   POST /admin/api-keys/new     → create key (shows raw key once)
+ *   POST /admin/api-keys/:id/revoke → revoke (delete) key
  */
 
 import { AutoRouter } from 'itty-router';
@@ -55,6 +61,10 @@ import {
   handleAdminUserDelete,
   handleAdminUserNew,
   handleAdminUsers,
+  handleAdminApiKeysList,
+  handleAdminApiKeyNew,
+  handleAdminApiKeyCreate,
+  handleAdminApiKeyRevoke,
 } from './admin';
 
 export interface Env {
@@ -128,6 +138,15 @@ router.get('/admin/users', handleAdminUsers);
 router.get('/admin/users/new', handleAdminUserNew);
 router.post('/admin/users/new', handleAdminUserCreate);
 router.post('/admin/users/:id/delete', handleAdminUserDelete);
+
+// ---------------------------------------------------------------------------
+// Admin HTML routes — API Keys
+// Note: /admin/api-keys/new must be registered before /admin/api-keys/:id/revoke
+// ---------------------------------------------------------------------------
+router.get('/admin/api-keys', handleAdminApiKeysList);
+router.get('/admin/api-keys/new', handleAdminApiKeyNew);
+router.post('/admin/api-keys/new', handleAdminApiKeyCreate);
+router.post('/admin/api-keys/:id/revoke', handleAdminApiKeyRevoke);
 
 // ---------------------------------------------------------------------------
 // Health

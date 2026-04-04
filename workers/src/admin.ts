@@ -132,6 +132,7 @@ function navBar(): string {
     <a href="/admin/places">Places</a>
     <a href="/admin/submissions">Submissions</a>
     <a href="/admin/users">Users</a>
+    <a href="/admin/api-keys">API Keys</a>
     <a href="/admin/logout">Logout</a>
   </nav>`;
 }
@@ -1938,5 +1939,190 @@ export async function handleAdminSubmissionReject(
 
   return redirect(
     `/admin/submissions?status=pending&ok=${encodeURIComponent(`Submission "${sub.name}" rejected.`)}`,
+  );
+}
+
+// ---------------------------------------------------------------------------
+// API Keys
+// ---------------------------------------------------------------------------
+
+interface ApiKeyRow {
+  id: number;
+  label: string;
+  scopes: string;
+  created_at: string;
+}
+
+/** GET /admin/api-keys */
+export async function handleAdminApiKeysList(
+  request: IRequest,
+  env: Env,
+): Promise<Response> {
+  const url = new URL((request as Request).url);
+  const flash = flashHtml(url);
+
+  const { results } = await env.DB.prepare(
+    `SELECT id, label, scopes, created_at FROM api_keys ORDER BY created_at DESC`,
+  ).all<ApiKeyRow>();
+
+  // Check if a newly-created key is being shown (passed via query param — shown once only)
+  const newKey = url.searchParams.get('new_key');
+  const newKeyHtml = newKey
+    ? `<div class="flash-success" style="word-break:break-all;">
+        <strong>New API key created — copy it now, it will not be shown again:</strong><br>
+        <code style="font-size:.9rem;user-select:all;">${esc(newKey)}</code>
+      </div>`
+    : '';
+
+  const rows = (results as ApiKeyRow[])
+    .map(
+      (k) => `
+    <tr>
+      <td>${esc(k.label)}</td>
+      <td>${k.scopes.split(',').map((s) => `<span class="badge badge-blue">${esc(s.trim())}</span>`).join(' ')}</td>
+      <td>${esc(k.created_at)}</td>
+      <td class="actions">
+        <form method="POST" action="/admin/api-keys/${k.id}/revoke"
+              onsubmit="return confirm('Revoke this key? It will stop working immediately.')">
+          <button type="submit" class="btn btn-danger btn-sm">Revoke</button>
+        </form>
+      </td>
+    </tr>`,
+    )
+    .join('');
+
+  const body = `
+    <div class="table-header">
+      <h1>API Keys</h1>
+      <a href="/admin/api-keys/new" class="btn btn-primary">+ New API Key</a>
+    </div>
+    ${flash}
+    ${newKeyHtml}
+    <div class="card" style="padding:0">
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Label</th>
+              <th>Scopes</th>
+              <th>Created</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows.length ? rows : '<tr><td colspan="4" class="empty">No API keys yet.</td></tr>'}
+          </tbody>
+        </table>
+      </div>
+    </div>`;
+
+  return html(page('API Keys', body, TABLE_STYLES));
+}
+
+/** GET /admin/api-keys/new */
+export async function handleAdminApiKeyNew(
+  _request: IRequest,
+  _env: Env,
+): Promise<Response> {
+  const body = `
+    <h1>New API Key</h1>
+    <div class="card">
+      <form method="POST" action="/admin/api-keys/new">
+        <div class="form-group">
+          <label for="label">Label</label>
+          <input type="text" id="label" name="label" required placeholder="e.g. content-agent">
+          <p class="hint">A human-readable name to identify this key.</p>
+        </div>
+        <div class="form-group">
+          <label>Scopes</label>
+          <div class="check-group"><input type="checkbox" name="scope_read" id="scope_read" value="1" checked> <label for="scope_read" style="display:inline">places:read</label></div>
+          <div class="check-group" style="margin-top:.4rem"><input type="checkbox" name="scope_write" id="scope_write" value="1"> <label for="scope_write" style="display:inline">places:write</label></div>
+        </div>
+        <div class="form-actions">
+          <button type="submit" class="btn btn-primary">Create Key</button>
+          <a href="/admin/api-keys" class="btn btn-secondary">Cancel</a>
+        </div>
+      </form>
+    </div>`;
+
+  return html(page('New API Key', body, FORM_STYLES));
+}
+
+/** POST /admin/api-keys/new */
+export async function handleAdminApiKeyCreate(
+  request: IRequest,
+  env: Env,
+): Promise<Response> {
+  let label = '';
+  let scopeRead = false;
+  let scopeWrite = false;
+
+  try {
+    const text = await (request as Request).text();
+    const params = new URLSearchParams(text);
+    label = params.get('label')?.trim() ?? '';
+    scopeRead = params.get('scope_read') === '1';
+    scopeWrite = params.get('scope_write') === '1';
+  } catch {
+    return redirect('/admin/api-keys/new');
+  }
+
+  if (!label) {
+    return redirect(
+      `/admin/api-keys/new?err=${encodeURIComponent('Label is required.')}`,
+    );
+  }
+
+  if (!scopeRead && !scopeWrite) {
+    return redirect(
+      `/admin/api-keys/new?err=${encodeURIComponent('At least one scope must be selected.')}`,
+    );
+  }
+
+  const scopes: string[] = [];
+  if (scopeRead) scopes.push('places:read');
+  if (scopeWrite) scopes.push('places:write');
+  // Also add the legacy 'write' scope token so requireAuth('write') checks pass
+  if (scopeWrite) scopes.push('write');
+
+  const rawKey = generateToken();
+  const keyHash = await hashToken(rawKey);
+
+  await env.DB.prepare(
+    `INSERT INTO api_keys (label, key_hash, scopes) VALUES (?, ?, ?)`,
+  )
+    .bind(label, keyHash, scopes.join(','))
+    .run();
+
+  // Redirect back to list with the raw key shown once
+  return redirect(
+    `/admin/api-keys?new_key=${encodeURIComponent(rawKey)}`,
+  );
+}
+
+/** POST /admin/api-keys/:id/revoke */
+export async function handleAdminApiKeyRevoke(
+  request: IRequest,
+  env: Env,
+): Promise<Response> {
+  const id = Number((request as any).params?.id);
+  if (!id) return redirect('/admin/api-keys');
+
+  const key = await env.DB.prepare(
+    `SELECT id, label FROM api_keys WHERE id = ?`,
+  )
+    .bind(id)
+    .first<{ id: number; label: string }>();
+
+  if (!key) {
+    return redirect(
+      `/admin/api-keys?err=${encodeURIComponent('API key not found.')}`,
+    );
+  }
+
+  await env.DB.prepare(`DELETE FROM api_keys WHERE id = ?`).bind(id).run();
+
+  return redirect(
+    `/admin/api-keys?ok=${encodeURIComponent(`Key "${key.label}" revoked.`)}`,
   );
 }
