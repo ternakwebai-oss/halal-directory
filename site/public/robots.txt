@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://halal.nusba.com/sitemap-index.xml
+Sitemap: https://halal.nusba.com/sitemap.xml
