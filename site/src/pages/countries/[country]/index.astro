@@ -1,0 +1,271 @@
+---
+import Base from '../../../layouts/Base.astro';
+import PlaceCard from '../../../components/PlaceCard.astro';
+
+interface Place {
+  slug: string;
+  name: string;
+  city: string;
+  country: string;
+  halal_certified: number;
+  category_name: string | null;
+}
+
+interface CityCount {
+  city: string;
+  count: number;
+}
+
+const { country: countrySlug } = Astro.params as { country: string };
+
+const PAGE_SIZE = 24;
+const pageParam = Astro.url.searchParams.get('page');
+const page = Math.max(1, parseInt(pageParam ?? '1', 10) || 1);
+const offset = (page - 1) * PAGE_SIZE;
+
+const runtime = Astro.locals.runtime;
+const db = runtime?.env?.DB as D1Database | undefined;
+
+let places: Place[] = [];
+let cities: CityCount[] = [];
+let totalCount = 0;
+let countryName = '';
+
+// SQL slug match: lower(replace(country, ' ', '-')) = ?
+const slugExpr = `lower(replace(country, ' ', '-'))`;
+
+if (db) {
+  const [placesResult, citiesResult, countResult, nameResult] = await Promise.all([
+    db.prepare(`
+      SELECT p.slug, p.name, p.city, p.country, p.halal_certified,
+             c.name AS category_name
+      FROM places p
+      LEFT JOIN categories c ON p.category_id = c.id
+      WHERE p.published = 1 AND ${slugExpr} = ?
+      ORDER BY p.name ASC
+      LIMIT ? OFFSET ?
+    `).bind(countrySlug, PAGE_SIZE, offset).all<Place>(),
+
+    db.prepare(`
+      SELECT city, COUNT(*) AS count
+      FROM places
+      WHERE published = 1 AND ${slugExpr} = ?
+      GROUP BY city
+      ORDER BY count DESC, city ASC
+    `).bind(countrySlug).all<CityCount>(),
+
+    db.prepare(`
+      SELECT COUNT(*) AS n FROM places WHERE published = 1 AND ${slugExpr} = ?
+    `).bind(countrySlug).first<{ n: number }>(),
+
+    db.prepare(`
+      SELECT country FROM places WHERE ${slugExpr} = ? LIMIT 1
+    `).bind(countrySlug).first<{ country: string }>(),
+  ]);
+
+  places = placesResult.results;
+  cities = citiesResult.results;
+  totalCount = countResult?.n ?? 0;
+  countryName = nameResult?.country ?? countrySlug;
+}
+
+const totalPages = Math.ceil(totalCount / PAGE_SIZE);
+
+function toSlug(s: string) {
+  return s.toLowerCase().replace(/\s+/g, '-');
+}
+
+const canonicalBase = new URL(`/countries/${countrySlug}`, Astro.site).href;
+const canonical = page > 1 ? `${canonicalBase}?page=${page}` : canonicalBase;
+
+const title = `Halal Places in ${countryName} | Halal Directory`;
+const description = `Find ${totalCount} halal-certified restaurants, cafés, butchers and more in ${countryName}. Browse by city or category.`;
+
+const breadcrumbJson = JSON.stringify({
+  '@context': 'https://schema.org',
+  '@type': 'BreadcrumbList',
+  itemListElement: [
+    { '@type': 'ListItem', position: 1, name: 'Home', item: Astro.site?.href },
+    { '@type': 'ListItem', position: 2, name: 'Countries', item: new URL('/countries', Astro.site).href },
+    { '@type': 'ListItem', position: 3, name: countryName, item: canonicalBase },
+  ],
+});
+---
+
+<Base title={title} description={description} canonical={canonical}>
+  <script type="application/ld+json" set:html={breadcrumbJson} slot="head" />
+
+  <div class="container">
+    <nav class="breadcrumb" aria-label="Breadcrumb">
+      <a href="/">Home</a>
+      <span aria-hidden="true">›</span>
+      <a href="/countries">Countries</a>
+      <span aria-hidden="true">›</span>
+      <span aria-current="page">{countryName}</span>
+    </nav>
+
+    <h1>Halal Places in {countryName}</h1>
+    <p class="subtitle">{totalCount} listing{totalCount !== 1 ? 's' : ''}</p>
+
+    {cities.length > 1 && (
+      <section class="cities-section">
+        <h2>Browse by City</h2>
+        <ul class="city-list">
+          {cities.map((c) => (
+            <li>
+              <a href={`/countries/${countrySlug}/${toSlug(c.city)}`}>
+                {c.city}
+                <span class="city-count">{c.count}</span>
+              </a>
+            </li>
+          ))}
+        </ul>
+      </section>
+    )}
+
+    {places.length > 0 ? (
+      <section>
+        {page > 1 && <h2 class="page-heading">Page {page}</h2>}
+        <div class="listing-grid">
+          {places.map((place) => (
+            <PlaceCard
+              slug={place.slug}
+              name={place.name}
+              city={place.city}
+              country={place.country}
+              halal_certified={place.halal_certified}
+              category_name={place.category_name ?? undefined}
+            />
+          ))}
+        </div>
+
+        {totalPages > 1 && (
+          <nav class="pagination" aria-label="Pagination">
+            {page > 1 && (
+              <a class="pagination__btn" href={page === 2 ? canonicalBase : `${canonicalBase}?page=${page - 1}`}>
+                ← Previous
+              </a>
+            )}
+            <span class="pagination__info">Page {page} of {totalPages}</span>
+            {page < totalPages && (
+              <a class="pagination__btn" href={`${canonicalBase}?page=${page + 1}`}>
+                Next →
+              </a>
+            )}
+          </nav>
+        )}
+      </section>
+    ) : (
+      <p class="empty-state">No listings found for this country.</p>
+    )}
+  </div>
+</Base>
+
+<style>
+  .container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 2rem 1.5rem;
+  }
+
+  .breadcrumb {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.85rem;
+    color: #666;
+    margin-bottom: 1.5rem;
+  }
+  .breadcrumb a { color: #15803d; }
+  .breadcrumb a:hover { text-decoration: underline; }
+
+  h1 {
+    font-size: clamp(1.5rem, 4vw, 2rem);
+    font-weight: 800;
+    margin-bottom: 0.25rem;
+  }
+  .subtitle {
+    color: #555;
+    margin-bottom: 2rem;
+  }
+
+  .cities-section {
+    margin-bottom: 2.5rem;
+  }
+  .cities-section h2 {
+    font-size: 1.1rem;
+    font-weight: 700;
+    margin-bottom: 0.75rem;
+    color: #1a1a1a;
+  }
+  .city-list {
+    list-style: none;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+  .city-list a {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    background: #fff;
+    border: 1px solid #d1d5db;
+    border-radius: 999px;
+    padding: 0.35rem 0.9rem;
+    font-size: 0.9rem;
+    color: #374151;
+    transition: border-color 0.15s, color 0.15s;
+  }
+  .city-list a:hover {
+    border-color: #15803d;
+    color: #15803d;
+  }
+  .city-count {
+    background: #f3f4f6;
+    border-radius: 999px;
+    padding: 0.05rem 0.45rem;
+    font-size: 0.75rem;
+    color: #666;
+  }
+
+  .page-heading {
+    font-size: 1rem;
+    font-weight: 600;
+    color: #555;
+    margin-bottom: 1rem;
+  }
+
+  .listing-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 1rem;
+  }
+
+  .pagination {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+    margin-top: 2.5rem;
+  }
+  .pagination__btn {
+    display: inline-block;
+    background: #15803d;
+    color: #fff;
+    padding: 0.55rem 1.2rem;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    transition: background 0.15s;
+  }
+  .pagination__btn:hover { background: #166534; }
+  .pagination__info {
+    font-size: 0.9rem;
+    color: #555;
+  }
+
+  .empty-state {
+    color: #666;
+    padding: 2rem 0;
+  }
+</style>
