@@ -137,3 +137,11 @@ dist
 # Vite logs files
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+
+# Astro
+site/dist/
+site/.astro/
+
+# Wrangler local state
+.wrangler/
+**/.wrangler/
