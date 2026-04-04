@@ -55,6 +55,15 @@ interface PlaceRow {
   halal_certified: number;
   published: number;
   category_name?: string | null;
+  first_photo?: string | null;
+}
+
+interface PhotoRow {
+  id: number;
+  place_id: number;
+  cloudinary_public_id: string;
+  caption: string | null;
+  sort_order: number;
 }
 
 interface CategoryRow {
@@ -81,6 +90,35 @@ function esc(s: unknown): string {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
+}
+
+// ---------------------------------------------------------------------------
+// Cloudinary helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Generate a Cloudinary API signature.
+ * Signature = SHA-1( "key1=val1&key2=val2..." + apiSecret ) with params sorted.
+ */
+async function cloudinarySign(
+  params: Record<string, string>,
+  apiSecret: string,
+): Promise<string> {
+  const paramStr =
+    Object.keys(params)
+      .sort()
+      .map((k) => `${k}=${params[k]}`)
+      .join('&') + apiSecret;
+  const data = new TextEncoder().encode(paramStr);
+  const hashBuf = await crypto.subtle.digest('SHA-1', data);
+  return Array.from(new Uint8Array(hashBuf))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+}
+
+/** Build a Cloudinary thumbnail URL (100×100, crop fill). */
+function cloudinaryThumb(cloudName: string, publicId: string): string {
+  return `https://res.cloudinary.com/${esc(cloudName)}/image/upload/c_fill,w_100,h_100,f_auto,q_auto/${esc(publicId)}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -611,6 +649,76 @@ function placeFormBody(
 }
 
 // ---------------------------------------------------------------------------
+// Photo gallery section for the edit page
+// ---------------------------------------------------------------------------
+
+function photoGalleryHtml(
+  placeId: number,
+  photos: PhotoRow[],
+  cloudName: string,
+  flash: string,
+): string {
+  const photoItems = photos
+    .map(
+      (ph, idx) => `
+    <div style="display:flex;align-items:center;gap:.75rem;padding:.75rem 0;border-bottom:1px solid #f1f5f9">
+      <img src="${cloudinaryThumb(cloudName, ph.cloudinary_public_id)}"
+           alt="${esc(ph.caption ?? '')}" width="100" height="100"
+           style="object-fit:cover;border-radius:4px;flex-shrink:0">
+      <div style="flex:1;min-width:0">
+        <div style="font-size:.75rem;color:#94a3b8;word-break:break-all;margin-bottom:.2rem">${esc(ph.cloudinary_public_id)}</div>
+        ${ph.caption ? `<div style="font-size:.875rem">${esc(ph.caption)}</div>` : '<div style="font-size:.8rem;color:#cbd5e1">No caption</div>'}
+      </div>
+      <div style="display:flex;flex-direction:column;gap:.25rem;flex-shrink:0">
+        ${idx > 0
+          ? `<form method="POST" action="/admin/places/${placeId}/photos/${ph.id}/up">
+               <button type="submit" class="btn btn-secondary btn-sm" title="Move up">↑</button>
+             </form>`
+          : `<button class="btn btn-secondary btn-sm" disabled style="opacity:.3">↑</button>`}
+        ${idx < photos.length - 1
+          ? `<form method="POST" action="/admin/places/${placeId}/photos/${ph.id}/down">
+               <button type="submit" class="btn btn-secondary btn-sm" title="Move down">↓</button>
+             </form>`
+          : `<button class="btn btn-secondary btn-sm" disabled style="opacity:.3">↓</button>`}
+      </div>
+      <form method="POST" action="/admin/places/${placeId}/photos/${ph.id}/delete"
+            onsubmit="return confirm('Delete this photo from Cloudinary?')" style="flex-shrink:0">
+        <button type="submit" class="btn btn-danger btn-sm">Delete</button>
+      </form>
+    </div>`,
+    )
+    .join('');
+
+  return `
+    <div id="photos" style="margin-top:2rem">
+      <h2 style="font-size:1.1rem;margin-bottom:1rem">Photos (${photos.length})</h2>
+      ${flash}
+      <div class="card">
+        ${photos.length === 0
+          ? `<p style="color:#94a3b8;text-align:center;padding:1.5rem 0;font-size:.875rem">No photos yet. Upload one below.</p>`
+          : `<div>${photoItems}</div>`}
+        <div style="border-top:2px dashed #e2e8f0;margin-top:1rem;padding-top:1rem">
+          <h3 style="font-size:.9rem;font-weight:600;margin-bottom:.75rem;color:#374151">Upload new photo</h3>
+          <form method="POST" action="/admin/places/${placeId}/photos/upload" enctype="multipart/form-data">
+            <div class="form-row">
+              <div class="form-group">
+                <label for="photo">Image file *</label>
+                <input type="file" id="photo" name="photo" accept="image/*" required
+                       style="padding:.4rem;font-size:.875rem">
+              </div>
+              <div class="form-group">
+                <label for="caption">Caption</label>
+                <input type="text" id="caption" name="caption" placeholder="Optional description">
+              </div>
+            </div>
+            <button type="submit" class="btn btn-primary">Upload photo</button>
+          </form>
+        </div>
+      </div>
+    </div>`;
+}
+
+// ---------------------------------------------------------------------------
 // Route handlers — Places CRUD
 // ---------------------------------------------------------------------------
 
@@ -656,7 +764,8 @@ export async function handleAdminPlacesList(
 
   const { results } = await env.DB.prepare(
     `SELECT p.id, p.name, p.slug, p.place_type, p.city, p.country, p.published,
-            c.name AS category_name
+            c.name AS category_name,
+            (SELECT cloudinary_public_id FROM photos WHERE place_id = p.id ORDER BY sort_order LIMIT 1) AS first_photo
      FROM places p
      LEFT JOIN categories c ON p.category_id = c.id
      ${where}
@@ -679,10 +788,17 @@ export async function handleAdminPlacesList(
     return `/admin/places?${qs.toString()}`;
   }
 
+  const cloudName = env.CLOUDINARY_CLOUD_NAME ?? '';
+
   const rows = results
     .map(
       (p) => `
     <tr>
+      <td style="width:60px">
+        ${p.first_photo && cloudName
+          ? `<img src="${cloudinaryThumb(cloudName, p.first_photo)}" alt="" width="50" height="50" style="object-fit:cover;border-radius:3px;display:block">`
+          : `<div style="width:50px;height:50px;background:#f1f5f9;border-radius:3px;display:flex;align-items:center;justify-content:center;color:#cbd5e1;font-size:.7rem">none</div>`}
+      </td>
       <td>${esc(p.name)}<br><small style="color:#94a3b8">${esc(p.slug)}</small></td>
       <td><span class="badge ${p.place_type === 'prayer' ? 'badge-orange' : 'badge-blue'}">${esc(p.place_type)}</span></td>
       <td>${esc(p.city)}</td>
@@ -707,7 +823,7 @@ export async function handleAdminPlacesList(
 
   const emptyRow =
     results.length === 0
-      ? `<tr><td colspan="7" class="empty">No places found.</td></tr>`
+      ? `<tr><td colspan="8" class="empty">No places found.</td></tr>`
       : '';
 
   // Pagination
@@ -774,6 +890,7 @@ export async function handleAdminPlacesList(
         <table>
           <thead>
             <tr>
+              <th>Photo</th>
               <th>Name / Slug</th>
               <th>Type</th>
               <th>City</th>
@@ -917,15 +1034,25 @@ export async function handleAdminPlaceEdit(
   const id = Number((request as any).params?.id);
   if (!id) return redirect('/admin/places');
 
+  const url = new URL((request as Request).url);
+
   const place = await env.DB.prepare(`SELECT * FROM places WHERE id = ?`)
     .bind(id)
     .first<PlaceRow>();
 
   if (!place) return redirect('/admin/places?err=Place+not+found');
 
-  const { results: categories } = await env.DB.prepare(
-    `SELECT id, name, slug FROM categories ORDER BY name`,
-  ).all<CategoryRow>();
+  const [{ results: categories }, { results: photos }] = await Promise.all([
+    env.DB.prepare(`SELECT id, name, slug FROM categories ORDER BY name`).all<CategoryRow>(),
+    env.DB.prepare(`SELECT id, place_id, cloudinary_public_id, caption, sort_order FROM photos WHERE place_id = ? ORDER BY sort_order`).bind(id).all<PhotoRow>(),
+  ]);
+
+  const gallery = photoGalleryHtml(
+    id,
+    photos,
+    env.CLOUDINARY_CLOUD_NAME ?? '',
+    flashHtml(url),
+  );
 
   const body = `
     <div style="display:flex;align-items:center;gap:1rem;margin-bottom:1.25rem">
@@ -934,7 +1061,8 @@ export async function handleAdminPlaceEdit(
     <h1>Edit: ${esc(place.name)}</h1>
     <div class="card">
       ${placeFormBody(`/admin/places/${id}/edit`, place, categories)}
-    </div>`;
+    </div>
+    ${gallery}`;
 
   return html(page(`Edit ${place.name}`, body, FORM_STYLES));
 }
@@ -1280,4 +1408,202 @@ export async function handleAdminUserDelete(
   await env.DB.prepare(`DELETE FROM admin_users WHERE id = ?`).bind(id).run();
 
   return redirect(`/admin/users?ok=${encodeURIComponent(`User "${user.username}" deleted.`)}`);
+}
+
+// ---------------------------------------------------------------------------
+// Route handlers — Photo management
+// ---------------------------------------------------------------------------
+
+/** POST /admin/places/:id/photos/upload */
+export async function handleAdminPhotoUpload(
+  request: IRequest,
+  env: Env,
+): Promise<Response> {
+  const id = Number((request as any).params?.id);
+  if (!id) return redirect('/admin/places');
+
+  const place = await env.DB.prepare(`SELECT id FROM places WHERE id = ?`)
+    .bind(id)
+    .first<{ id: number }>();
+  if (!place) return redirect('/admin/places?err=Place+not+found');
+
+  let formData: FormData;
+  try {
+    formData = await (request as Request).formData();
+  } catch {
+    return redirect(
+      `/admin/places/${id}/edit?err=${encodeURIComponent('Could not parse form data.')}#photos`,
+    );
+  }
+
+  const file = formData.get('photo');
+  if (!file || typeof file === 'string' || (file as Blob).size === 0) {
+    return redirect(
+      `/admin/places/${id}/edit?err=${encodeURIComponent('No image file selected.')}#photos`,
+    );
+  }
+
+  // Build signed Cloudinary upload request
+  const timestamp = Math.floor(Date.now() / 1000).toString();
+  const signature = await cloudinarySign({ timestamp }, env.CLOUDINARY_API_SECRET);
+
+  const cloudForm = new FormData();
+  cloudForm.append('file', file);
+  cloudForm.append('api_key', env.CLOUDINARY_API_KEY);
+  cloudForm.append('timestamp', timestamp);
+  cloudForm.append('signature', signature);
+
+  let publicId: string;
+  try {
+    const cloudRes = await fetch(
+      `https://api.cloudinary.com/v1_1/${env.CLOUDINARY_CLOUD_NAME}/image/upload`,
+      { method: 'POST', body: cloudForm },
+    );
+    if (!cloudRes.ok) {
+      const errBody = await cloudRes.text().catch(() => '');
+      console.error('Cloudinary upload error', cloudRes.status, errBody);
+      return redirect(
+        `/admin/places/${id}/edit?err=${encodeURIComponent('Cloudinary upload failed. Check Worker logs.')}#photos`,
+      );
+    }
+    const cloudData = (await cloudRes.json()) as { public_id: string };
+    publicId = cloudData.public_id;
+  } catch (e) {
+    console.error('Cloudinary fetch error', e);
+    return redirect(
+      `/admin/places/${id}/edit?err=${encodeURIComponent('Network error contacting Cloudinary.')}#photos`,
+    );
+  }
+
+  const caption = (formData.get('caption') as string | null)?.trim() || null;
+
+  // Determine next sort_order
+  const maxRow = await env.DB.prepare(
+    `SELECT COALESCE(MAX(sort_order), -1) AS m FROM photos WHERE place_id = ?`,
+  )
+    .bind(id)
+    .first<{ m: number }>();
+  const sortOrder = (maxRow?.m ?? -1) + 1;
+
+  await env.DB.prepare(
+    `INSERT INTO photos (place_id, cloudinary_public_id, caption, sort_order) VALUES (?, ?, ?, ?)`,
+  )
+    .bind(id, publicId, caption, sortOrder)
+    .run();
+
+  return redirect(
+    `/admin/places/${id}/edit?ok=${encodeURIComponent('Photo uploaded successfully.')}#photos`,
+  );
+}
+
+/** POST /admin/places/:id/photos/:photoId/delete */
+export async function handleAdminPhotoDelete(
+  request: IRequest,
+  env: Env,
+): Promise<Response> {
+  const id = Number((request as any).params?.id);
+  const photoId = Number((request as any).params?.photoId);
+  if (!id || !photoId) return redirect('/admin/places');
+
+  const photo = await env.DB.prepare(
+    `SELECT id, cloudinary_public_id FROM photos WHERE id = ? AND place_id = ?`,
+  )
+    .bind(photoId, id)
+    .first<{ id: number; cloudinary_public_id: string }>();
+
+  if (!photo) {
+    return redirect(
+      `/admin/places/${id}/edit?err=${encodeURIComponent('Photo not found.')}#photos`,
+    );
+  }
+
+  // Best-effort delete from Cloudinary
+  try {
+    const timestamp = Math.floor(Date.now() / 1000).toString();
+    const signature = await cloudinarySign(
+      { public_id: photo.cloudinary_public_id, timestamp },
+      env.CLOUDINARY_API_SECRET,
+    );
+    const cloudForm = new FormData();
+    cloudForm.append('public_id', photo.cloudinary_public_id);
+    cloudForm.append('api_key', env.CLOUDINARY_API_KEY);
+    cloudForm.append('timestamp', timestamp);
+    cloudForm.append('signature', signature);
+    await fetch(
+      `https://api.cloudinary.com/v1_1/${env.CLOUDINARY_CLOUD_NAME}/image/destroy`,
+      { method: 'POST', body: cloudForm },
+    );
+  } catch (e) {
+    console.error('Cloudinary destroy error', e);
+  }
+
+  await env.DB.prepare(`DELETE FROM photos WHERE id = ?`).bind(photoId).run();
+
+  return redirect(
+    `/admin/places/${id}/edit?ok=${encodeURIComponent('Photo deleted.')}#photos`,
+  );
+}
+
+/** POST /admin/places/:id/photos/:photoId/up — swap with the previous photo */
+export async function handleAdminPhotoMoveUp(
+  request: IRequest,
+  env: Env,
+): Promise<Response> {
+  const id = Number((request as any).params?.id);
+  const photoId = Number((request as any).params?.photoId);
+  if (!id || !photoId) return redirect('/admin/places');
+
+  const photo = await env.DB.prepare(
+    `SELECT id, sort_order FROM photos WHERE id = ? AND place_id = ?`,
+  )
+    .bind(photoId, id)
+    .first<{ id: number; sort_order: number }>();
+  if (!photo) return redirect(`/admin/places/${id}/edit#photos`);
+
+  const prev = await env.DB.prepare(
+    `SELECT id, sort_order FROM photos WHERE place_id = ? AND sort_order < ? ORDER BY sort_order DESC LIMIT 1`,
+  )
+    .bind(id, photo.sort_order)
+    .first<{ id: number; sort_order: number }>();
+
+  if (prev) {
+    await env.DB.batch([
+      env.DB.prepare(`UPDATE photos SET sort_order = ? WHERE id = ?`).bind(prev.sort_order, photo.id),
+      env.DB.prepare(`UPDATE photos SET sort_order = ? WHERE id = ?`).bind(photo.sort_order, prev.id),
+    ]);
+  }
+
+  return redirect(`/admin/places/${id}/edit#photos`);
+}
+
+/** POST /admin/places/:id/photos/:photoId/down — swap with the next photo */
+export async function handleAdminPhotoMoveDown(
+  request: IRequest,
+  env: Env,
+): Promise<Response> {
+  const id = Number((request as any).params?.id);
+  const photoId = Number((request as any).params?.photoId);
+  if (!id || !photoId) return redirect('/admin/places');
+
+  const photo = await env.DB.prepare(
+    `SELECT id, sort_order FROM photos WHERE id = ? AND place_id = ?`,
+  )
+    .bind(photoId, id)
+    .first<{ id: number; sort_order: number }>();
+  if (!photo) return redirect(`/admin/places/${id}/edit#photos`);
+
+  const next = await env.DB.prepare(
+    `SELECT id, sort_order FROM photos WHERE place_id = ? AND sort_order > ? ORDER BY sort_order ASC LIMIT 1`,
+  )
+    .bind(id, photo.sort_order)
+    .first<{ id: number; sort_order: number }>();
+
+  if (next) {
+    await env.DB.batch([
+      env.DB.prepare(`UPDATE photos SET sort_order = ? WHERE id = ?`).bind(next.sort_order, photo.id),
+      env.DB.prepare(`UPDATE photos SET sort_order = ? WHERE id = ?`).bind(photo.sort_order, next.id),
+    ]);
+  }
+
+  return redirect(`/admin/places/${id}/edit#photos`);
 }

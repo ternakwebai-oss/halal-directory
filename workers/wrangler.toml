@@ -11,6 +11,12 @@ migrations_dir = "migrations"
 
 [vars]
 # Non-secret vars go here. Secrets are set via `wrangler secret put`.
+#
+# Required secrets (run once per environment):
+#   wrangler secret put ADMIN_SESSION_SECRET
+#   wrangler secret put CLOUDINARY_CLOUD_NAME
+#   wrangler secret put CLOUDINARY_API_KEY
+#   wrangler secret put CLOUDINARY_API_SECRET
 
 [dev]
 port = 8787

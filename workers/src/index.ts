@@ -34,6 +34,10 @@ import {
   handleAdminLoginPage,
   handleAdminLoginSubmit,
   handleAdminLogout,
+  handleAdminPhotoDelete,
+  handleAdminPhotoMoveDown,
+  handleAdminPhotoMoveUp,
+  handleAdminPhotoUpload,
   handleAdminPlaceCreate,
   handleAdminPlaceDelete,
   handleAdminPlaceDeleteConfirm,
@@ -90,6 +94,15 @@ router.post('/admin/places/:id/edit', handleAdminPlaceUpdate);
 router.get('/admin/places/:id/delete', handleAdminPlaceDeleteConfirm);
 router.post('/admin/places/:id/delete', handleAdminPlaceDelete);
 router.post('/admin/places/:id/toggle-published', handleAdminPlaceTogglePublished);
+
+// ---------------------------------------------------------------------------
+// Admin HTML routes — Photo management
+// Note: /admin/places/:id/photos/upload must be before /:id/photos/:photoId/*
+// ---------------------------------------------------------------------------
+router.post('/admin/places/:id/photos/upload', handleAdminPhotoUpload);
+router.post('/admin/places/:id/photos/:photoId/delete', handleAdminPhotoDelete);
+router.post('/admin/places/:id/photos/:photoId/up', handleAdminPhotoMoveUp);
+router.post('/admin/places/:id/photos/:photoId/down', handleAdminPhotoMoveDown);
 
 // ---------------------------------------------------------------------------
 // Admin HTML routes — Users

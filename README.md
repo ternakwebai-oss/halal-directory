@@ -78,6 +78,48 @@ Migration `0003_seed_admin_user.sql` inserts a default admin user:
 
 ---
 
+## Cloudinary image management
+
+Photos for listings are stored in [Cloudinary](https://cloudinary.com). The
+Worker uploads images server-side using a signed API call — no browser-to-CDN
+upload, no public upload preset required.
+
+### Required Worker secrets
+
+Set these once per environment with `wrangler secret put`:
+
+| Secret | Description |
+|--------|-------------|
+| `CLOUDINARY_CLOUD_NAME` | Your Cloudinary cloud name (e.g. `my-cloud`) |
+| `CLOUDINARY_API_KEY` | API key from the Cloudinary dashboard |
+| `CLOUDINARY_API_SECRET` | API secret from the Cloudinary dashboard |
+| `ADMIN_SESSION_SECRET` | Random secret for admin session signing |
+
+```bash
+cd workers
+wrangler secret put CLOUDINARY_CLOUD_NAME
+wrangler secret put CLOUDINARY_API_KEY
+wrangler secret put CLOUDINARY_API_SECRET
+wrangler secret put ADMIN_SESSION_SECRET
+```
+
+### Photo management (admin panel)
+
+On each place's edit page (`/admin/places/:id/edit`) there is a **Photos**
+section below the main form:
+
+- **Upload** — multipart form → Worker signs and proxies the upload to
+  Cloudinary's `/image/upload` endpoint; `cloudinary_public_id` is saved to
+  the `photos` table.
+- **Delete** — calls Cloudinary `/image/destroy` (best-effort) then removes the
+  row from `photos`.
+- **Reorder** — ↑ / ↓ arrows swap `sort_order` values between adjacent rows.
+
+The places list (`/admin/places`) shows a 100×100 thumbnail of the first photo
+for each listing.
+
+---
+
 ## Authentication
 
 The Worker supports two auth methods:
