@@ -16,9 +16,9 @@ interface CountryRow {
   country: string;
 }
 
-const runtime = Astro.locals.runtime;
-const db = runtime?.env?.DB as D1Database | undefined;
-const turnstileSiteKey = (runtime?.env as Record<string, string> | undefined)?.TURNSTILE_SITE_KEY ?? '';
+import { env } from "cloudflare:workers";
+const db = env.DB as D1Database;
+const turnstileSiteKey = (env as unknown as Record<string, string>).TURNSTILE_SITE_KEY ?? '';
 
 let categories: Category[] = [];
 let cities: CityRow[] = [];

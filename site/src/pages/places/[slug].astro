@@ -26,9 +26,9 @@ interface Photo {
 
 const { slug } = Astro.params as { slug: string };
 
-const runtime = Astro.locals.runtime;
-const db = runtime?.env?.DB as D1Database | undefined;
-const cloudName: string = (runtime?.env as Record<string, string> | undefined)?.CLOUDINARY_CLOUD_NAME ?? 'halal-directory';
+import { env } from "cloudflare:workers";
+const db = env.DB as D1Database;
+const cloudName: string = (env as unknown as Record<string, string>).CLOUDINARY_CLOUD_NAME ?? 'halal-directory';
 
 let place: Place | null = null;
 let photos: Photo[] = [];

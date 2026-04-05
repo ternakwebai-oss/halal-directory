@@ -16,8 +16,8 @@ const q = Astro.url.searchParams.get('q')?.trim() ?? '';
 const type = Astro.url.searchParams.get('type') ?? 'all';
 const country = Astro.url.searchParams.get('country') ?? '';
 
-const runtime = Astro.locals.runtime;
-const db = runtime?.env?.DB as D1Database | undefined;
+import { env } from "cloudflare:workers";
+const db = env.DB as D1Database;
 
 let results: SearchResult[] = [];
 let searchError = false;

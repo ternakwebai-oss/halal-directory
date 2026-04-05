@@ -18,8 +18,8 @@ const pageParam = Astro.url.searchParams.get('page');
 const page = Math.max(1, parseInt(pageParam ?? '1', 10) || 1);
 const offset = (page - 1) * PAGE_SIZE;
 
-const runtime = Astro.locals.runtime;
-const db = runtime?.env?.DB as D1Database | undefined;
+import { env } from "cloudflare:workers";
+const db = env.DB as D1Database;
 
 let places: Place[] = [];
 let totalCount = 0;

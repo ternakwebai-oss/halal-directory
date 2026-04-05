@@ -41,11 +41,10 @@ function url(
   return parts.join('');
 }
 
-export const GET: APIRoute = async ({ locals }) => {
-  const runtime = (locals as Record<string, unknown>).runtime as
-    | { env?: Record<string, unknown> }
-    | undefined;
-  const db = runtime?.env?.DB as D1Database | undefined;
+import { env } from "cloudflare:workers";
+
+export const GET: APIRoute = async () => {
+  const db = env.DB as D1Database;
 
   const entries: string[] = [];
 

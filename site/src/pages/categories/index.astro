@@ -8,8 +8,8 @@ interface CategoryRow {
   count: number;
 }
 
-const runtime = Astro.locals.runtime;
-const db = runtime?.env?.DB as D1Database | undefined;
+import { env } from "cloudflare:workers";
+const db = env.DB as D1Database;
 
 let categories: CategoryRow[] = [];
 
