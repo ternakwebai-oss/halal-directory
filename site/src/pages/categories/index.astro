@@ -1,4 +1,5 @@
 ---
+import { env } from 'cloudflare:workers';
 import Base from '../../layouts/Base.astro';
 
 interface CategoryRow {
@@ -8,7 +9,6 @@ interface CategoryRow {
   count: number;
 }
 
-import { env } from "cloudflare:workers";
 const db = env.DB as D1Database;
 
 let categories: CategoryRow[] = [];

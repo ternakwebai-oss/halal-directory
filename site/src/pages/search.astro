@@ -1,4 +1,5 @@
 ---
+import { env } from 'cloudflare:workers';
 import Base from '../layouts/Base.astro';
 
 interface SearchResult {
@@ -16,7 +17,6 @@ const q = Astro.url.searchParams.get('q')?.trim() ?? '';
 const type = Astro.url.searchParams.get('type') ?? 'all';
 const country = Astro.url.searchParams.get('country') ?? '';
 
-import { env } from "cloudflare:workers";
 const db = env.DB as D1Database;
 
 let results: SearchResult[] = [];

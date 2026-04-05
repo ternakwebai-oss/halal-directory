@@ -1,4 +1,5 @@
 ---
+import { env } from 'cloudflare:workers';
 import Base from '../layouts/Base.astro';
 import PlaceCard from '../components/PlaceCard.astro';
 
@@ -23,7 +24,6 @@ interface Category {
   name: string;
 }
 
-import { env } from "cloudflare:workers";
 const db = env.DB as D1Database;
 
 let recentListings: Place[] = [];

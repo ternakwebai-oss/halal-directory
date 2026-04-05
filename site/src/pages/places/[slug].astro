@@ -1,4 +1,5 @@
 ---
+import { env } from 'cloudflare:workers';
 import Base from '../../layouts/Base.astro';
 
 interface Place {
@@ -26,7 +27,6 @@ interface Photo {
 
 const { slug } = Astro.params as { slug: string };
 
-import { env } from "cloudflare:workers";
 const db = env.DB as D1Database;
 const cloudName: string = (env as unknown as Record<string, string>).CLOUDINARY_CLOUD_NAME ?? 'halal-directory';
 
