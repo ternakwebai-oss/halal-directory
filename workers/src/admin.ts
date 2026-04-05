@@ -133,6 +133,7 @@ function navBar(): string {
     <a href="/admin/submissions">Submissions</a>
     <a href="/admin/users">Users</a>
     <a href="/admin/api-keys">API Keys</a>
+    <a href="/admin/profile/change-password">Change Password</a>
     <a href="/admin/logout">Logout</a>
   </nav>`;
 }
@@ -2125,4 +2126,95 @@ export async function handleAdminApiKeyRevoke(
   return redirect(
     `/admin/api-keys?ok=${encodeURIComponent(`Key "${key.label}" revoked.`)}`,
   );
+}
+
+// ---------------------------------------------------------------------------
+// Route handlers — Change own password
+// ---------------------------------------------------------------------------
+
+/** GET /admin/profile/change-password */
+export async function handleAdminChangePasswordPage(
+  request: IRequest,
+): Promise<Response> {
+  const url = new URL((request as Request).url);
+  const flash = flashHtml(url);
+  return html(
+    page(
+      'Change Password',
+      `<h1>Change Password</h1>
+      ${flash}
+      <div class="card" style="max-width:480px">
+        <form method="POST" action="/admin/profile/change-password">
+          <div class="form-group">
+            <label for="current_password">Current Password *</label>
+            <input type="password" id="current_password" name="current_password" required autocomplete="current-password">
+          </div>
+          <div class="form-group">
+            <label for="new_password">New Password *</label>
+            <input type="password" id="new_password" name="new_password" required minlength="8" autocomplete="new-password">
+            <div class="hint">Minimum 8 characters.</div>
+          </div>
+          <div class="form-group">
+            <label for="confirm_password">Confirm New Password *</label>
+            <input type="password" id="confirm_password" name="confirm_password" required minlength="8" autocomplete="new-password">
+          </div>
+          <div style="display:flex;gap:.75rem;margin-top:1.25rem">
+            <button type="submit" class="btn btn-primary">Change Password</button>
+            <a href="/admin" class="btn btn-secondary">Cancel</a>
+          </div>
+        </form>
+      </div>`,
+      FORM_STYLES,
+    ),
+  );
+}
+
+/** POST /admin/profile/change-password */
+export async function handleAdminChangePasswordSubmit(
+  request: IRequest,
+  env: Env,
+): Promise<Response> {
+  const adminReq = request as AdminRequest;
+  const userId = adminReq.adminUser?.id;
+  if (!userId) return redirect('/admin/login');
+
+  const contentType = (request as Request).headers.get('Content-Type') ?? '';
+  let currentPassword = '';
+  let newPassword = '';
+  let confirmPassword = '';
+
+  if (contentType.includes('application/x-www-form-urlencoded')) {
+    const text = await (request as Request).text();
+    const p = new URLSearchParams(text);
+    currentPassword = p.get('current_password') ?? '';
+    newPassword = p.get('new_password') ?? '';
+    confirmPassword = p.get('confirm_password') ?? '';
+  }
+
+  if (!currentPassword || !newPassword || !confirmPassword) {
+    return redirect(`/admin/profile/change-password?err=${encodeURIComponent('All fields are required.')}`);
+  }
+  if (newPassword.length < 8) {
+    return redirect(`/admin/profile/change-password?err=${encodeURIComponent('New password must be at least 8 characters.')}`);
+  }
+  if (newPassword !== confirmPassword) {
+    return redirect(`/admin/profile/change-password?err=${encodeURIComponent('New passwords do not match.')}`);
+  }
+
+  const user = await env.DB.prepare(
+    `SELECT password_hash FROM admin_users WHERE id = ?`,
+  )
+    .bind(userId)
+    .first<{ password_hash: string }>();
+
+  if (!user || !(await verifyPassword(currentPassword, user.password_hash))) {
+    return redirect(`/admin/profile/change-password?err=${encodeURIComponent('Current password is incorrect.')}`);
+  }
+
+  const newHash = await hashPassword(newPassword);
+  await env.DB.prepare(`UPDATE admin_users SET password_hash = ? WHERE id = ?`)
+    .bind(newHash, userId)
+    .run();
+
+  return redirect(`/admin/profile/change-password?ok=${encodeURIComponent('Password changed successfully.')}`);
 }

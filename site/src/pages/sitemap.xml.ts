@@ -4,7 +4,7 @@ const SITE = 'https://halal.nusba.com';
 
 interface PlaceRow {
   slug: string;
-  updated_at: string | null;
+  created_at: string | null;
 }
 
 interface CategoryRow {
@@ -41,7 +41,7 @@ function url(
   return parts.join('');
 }
 
-import { env } from "cloudflare:workers";
+import { env } from 'cloudflare:workers';
 
 export const GET: APIRoute = async () => {
   const db = env.DB as D1Database;
@@ -59,14 +59,14 @@ export const GET: APIRoute = async () => {
     // All published listing detail pages
     const placesResult = await db
       .prepare(
-        `SELECT slug, updated_at FROM places WHERE published = 1 ORDER BY slug ASC`
+        `SELECT slug, created_at FROM places WHERE published = 1 ORDER BY slug ASC`
       )
       .all<PlaceRow>();
 
     for (const place of placesResult.results) {
       entries.push(
         url(`${SITE}/places/${escapeXml(place.slug)}`, {
-          lastmod: place.updated_at ?? undefined,
+          lastmod: place.created_at ?? undefined,
           changefreq: 'weekly',
           priority: '0.8',
         })

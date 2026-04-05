@@ -65,6 +65,8 @@ import {
   handleAdminApiKeyNew,
   handleAdminApiKeyCreate,
   handleAdminApiKeyRevoke,
+  handleAdminChangePasswordPage,
+  handleAdminChangePasswordSubmit,
 } from './admin';
 
 export interface Env {
@@ -138,6 +140,12 @@ router.get('/admin/users', handleAdminUsers);
 router.get('/admin/users/new', handleAdminUserNew);
 router.post('/admin/users/new', handleAdminUserCreate);
 router.post('/admin/users/:id/delete', handleAdminUserDelete);
+
+// ---------------------------------------------------------------------------
+// Admin HTML routes — Change own password
+// ---------------------------------------------------------------------------
+router.get('/admin/profile/change-password', handleAdminChangePasswordPage);
+router.post('/admin/profile/change-password', handleAdminChangePasswordSubmit);
 
 // ---------------------------------------------------------------------------
 // Admin HTML routes — API Keys
