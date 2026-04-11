@@ -10,8 +10,8 @@
  *
  * This script:
  * 1. Creates dist/_worker.js — re-exports the Astro Worker from server/entry.mjs
- * 2. Replaces dist/server/wrangler.json with a minimal whitelist-only config
- *    containing only the fields Pages actually needs (bindings, compat flags).
+ * 2. Deletes dist/server/wrangler.json so Wrangler does not redirect its config
+ *    away from site/wrangler.toml, which would cause static assets to be skipped.
  */
 
 import fs from 'node:fs';
@@ -31,47 +31,12 @@ export { default } from './server/entry.mjs';
 );
 console.log('Created dist/_worker.js');
 
-// ── 2. Replace wrangler.json with whitelist-only config ───────────────────────
+// ── 2. Delete wrangler.json to prevent Wrangler config redirect ───────────────
 
 if (!fs.existsSync(serverWrangler)) {
-  console.log('dist/server/wrangler.json not found — skipping wrangler patch');
+  console.log('dist/server/wrangler.json not found — nothing to delete');
   process.exit(0);
 }
 
-const generated = JSON.parse(fs.readFileSync(serverWrangler, 'utf8'));
-
-// Only keep fields that Cloudflare Pages accepts.
-// Everything else (main, pages_build_output_dir, assets, kv_namespaces,
-// rules, no_bundle, triggers, definedEnvironments, ai_search, ...) is dropped.
-const KEEP = [
-  'name',
-  'compatibility_date',
-  'compatibility_flags',
-  'd1_databases',
-  'kv_namespaces_with_id', // future-proofing: only KV entries that have real IDs
-  'r2_buckets',
-  'services',
-  'vars',
-];
-
-const clean = {};
-for (const key of KEEP) {
-  if (generated[key] !== undefined) clean[key] = generated[key];
-}
-
-// Always ensure nodejs_compat_v2 is present — Pages needs it for Astro SSR.
-// Note: nodejs_compat and nodejs_compat_v2 are mutually exclusive; use v2 only.
-clean.compatibility_date = clean.compatibility_date ?? '2025-01-01';
-const flags = new Set((clean.compatibility_flags ?? []).filter(f => f !== 'nodejs_compat'));
-flags.add('nodejs_compat_v2');
-clean.compatibility_flags = [...flags];
-
-// Re-add kv_namespaces only if every entry has a real "id" field (not just binding).
-if (Array.isArray(generated.kv_namespaces)) {
-  const valid = generated.kv_namespaces.filter(kv => kv.id && kv.id.trim() !== '');
-  if (valid.length > 0) clean.kv_namespaces = valid;
-}
-
-fs.writeFileSync(serverWrangler, JSON.stringify(clean, null, 2));
-console.log('Replaced dist/server/wrangler.json with Pages-compatible config');
-console.log('  kept fields:', Object.keys(clean).join(', '));
+fs.unlinkSync(serverWrangler);
+console.log('Deleted dist/server/wrangler.json to prevent Wrangler config redirect');
