@@ -39,27 +39,27 @@ let place: Place | null = null;
 let photos: Photo[] = [];
 
 if (db) {
-  const numericId = Number(id);
-  const [placeResult, photosResult] = await Promise.all([
-    db.prepare(`
-      SELECT p.id, p.slug, p.name, p.description, p.address,
-             p.city, p.country, p.lat, p.lng, p.phone, p.website,
-             p.hours, p.halal_certified,
-             c.name AS category_name, c.slug AS category_slug
-      FROM places p
-      LEFT JOIN categories c ON p.category_id = c.id
-      WHERE p.id = ? AND p.published = 1
-      LIMIT 1
-    `).bind(numericId).first<Place>(),
-    db.prepare(`
+  const slugSuffix = `%-${id}`;
+  const placeResult = await db.prepare(`
+    SELECT p.id, p.slug, p.name, p.description, p.address,
+           p.city, p.country, p.lat, p.lng, p.phone, p.website,
+           p.hours, p.halal_certified,
+           c.name AS category_name, c.slug AS category_slug
+    FROM places p
+    LEFT JOIN categories c ON p.category_id = c.id
+    WHERE p.slug LIKE ? AND p.published = 1
+    LIMIT 1
+  `).bind(slugSuffix).first<Place>();
+  place = placeResult ?? null;
+  if (place) {
+    const photosResult = await db.prepare(`
       SELECT cloudinary_public_id, caption
       FROM photos
       WHERE place_id = ?
       ORDER BY sort_order ASC
-    `).bind(numericId).all<Photo>(),
-  ]);
-  place = placeResult ?? null;
-  photos = photosResult.results;
+    `).bind(place.id).all<Photo>();
+    photos = photosResult.results;
+  }
 }
 
 if (!place) {
