@@ -12,13 +12,17 @@
  * 1. Creates dist/_worker.js — re-exports the Astro Worker from server/entry.mjs
  * 2. Deletes dist/server/wrangler.json so Wrangler does not redirect its config
  *    away from site/wrangler.toml, which would cause static assets to be skipped.
+ * 3. Deletes .wrangler/deploy/config.json if it caches that redirect path, since
+ *    Wrangler errors out when the cached redirect target no longer exists.
  */
 
 import fs from 'node:fs';
 
-const distDir = new URL('../dist/', import.meta.url).pathname;
+const siteDir = new URL('../', import.meta.url).pathname;
+const distDir = siteDir + 'dist/';
 const serverWrangler = distDir + 'server/wrangler.json';
 const workerShim = distDir + '_worker.js';
+const deployConfig = siteDir + '.wrangler/deploy/config.json';
 
 // ── 1. Create _worker.js shim ─────────────────────────────────────────────────
 
@@ -40,3 +44,10 @@ if (!fs.existsSync(serverWrangler)) {
 
 fs.unlinkSync(serverWrangler);
 console.log('Deleted dist/server/wrangler.json to prevent Wrangler config redirect');
+
+// ── 3. Delete .wrangler/deploy/config.json if it points to the now-gone file ──
+
+if (fs.existsSync(deployConfig)) {
+  fs.unlinkSync(deployConfig);
+  console.log('Deleted .wrangler/deploy/config.json (cached redirect — no longer valid)');
+}
