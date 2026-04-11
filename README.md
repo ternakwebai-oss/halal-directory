@@ -464,3 +464,5 @@ Add these in your repository's **Settings → Secrets and variables → Actions*
 Password hashing uses PBKDF2-SHA256 (100,000 iterations, 32-byte key) via the Web Crypto API.
 
 Session cookies are `HttpOnly`, `SameSite=Strict`, and expire after 7 days.
+
+.
