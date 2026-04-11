@@ -33,6 +33,19 @@ const cloudName: string = (env as unknown as Record<string, string>).CLOUDINARY_
 let place: Place | null = null;
 let photos: Photo[] = [];
 
+// Redirect numeric-ID-only URLs (e.g. /places/196) to the canonical slug URL
+if (/^\d+$/.test(slug)) {
+  if (db) {
+    const found = await db.prepare(`
+      SELECT slug FROM places WHERE id = ? AND published = 1 LIMIT 1
+    `).bind(Number(slug)).first<{ slug: string }>();
+    if (found) {
+      return Astro.redirect('/places/' + found.slug, 301);
+    }
+  }
+  return Astro.redirect('/404', 404);
+}
+
 if (db) {
   const [placeResult, photosResult] = await Promise.all([
     db.prepare(`
