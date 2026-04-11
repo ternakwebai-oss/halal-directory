@@ -32,6 +32,9 @@ jobs:
           # Public env vars used at build time
           PUBLIC_WORKER_URL: ${{ secrets.PUBLIC_WORKER_URL }}
 
+      - name: Copy static assets
+        run: cp -R site/public/. site/dist/
+
       - name: Deploy to Cloudflare Pages
         uses: cloudflare/wrangler-action@v3
         with:
