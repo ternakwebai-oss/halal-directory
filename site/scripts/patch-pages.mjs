@@ -14,6 +14,8 @@
  *    away from site/wrangler.toml, which would cause static assets to be skipped.
  * 3. Deletes .wrangler/deploy/config.json if it caches that redirect path, since
  *    Wrangler errors out when the cached redirect target no longer exists.
+ * 4. Copies public/ files to dist/ root so static assets are served at correct URL
+ *    paths by env.ASSETS.fetch() (e.g. /logo.jpg, /favicon.svg).
  */
 
 import fs from 'node:fs';
@@ -51,3 +53,8 @@ if (fs.existsSync(deployConfig)) {
   fs.unlinkSync(deployConfig);
   console.log('Deleted .wrangler/deploy/config.json (cached redirect — no longer valid)');
 }
+
+// ── 4. Copy public/ files to dist/ root for correct ASSETS URL mapping ────────
+const publicDir = new URL('../public/', import.meta.url).pathname;
+fs.cpSync(publicDir, distDir, { recursive: true, force: true });
+console.log('Copied public/ files to dist/ root for correct ASSETS URL mapping');
