@@ -33,20 +33,35 @@ const cloudName: string = (env as unknown as Record<string, string>).CLOUDINARY_
 let place: Place | null = null;
 let photos: Photo[] = [];
 
-// Redirect numeric-ID-only URLs (e.g. /places/196) to the canonical slug URL
 if (/^\d+$/.test(slug)) {
+  // Numeric-ID URL (e.g. /places/196): render content with canonical pointing to slug URL
   if (db) {
-    const found = await db.prepare(`
-      SELECT slug FROM places WHERE id = ? AND published = 1 LIMIT 1
-    `).bind(Number(slug)).first<{ slug: string }>();
-    if (found) {
-      return Astro.redirect('/places/' + found.slug, 301);
-    }
+    const numericId = Number(slug);
+    const [placeResult, photosResult] = await Promise.all([
+      db.prepare(`
+        SELECT p.id, p.slug, p.name, p.description, p.address,
+               p.city, p.country, p.lat, p.lng, p.phone, p.website,
+               p.hours, p.halal_certified,
+               c.name AS category_name, c.slug AS category_slug
+        FROM places p
+        LEFT JOIN categories c ON p.category_id = c.id
+        WHERE p.id = ? AND p.published = 1
+        LIMIT 1
+      `).bind(numericId).first<Place>(),
+      db.prepare(`
+        SELECT cloudinary_public_id, caption
+        FROM photos
+        WHERE place_id = ?
+        ORDER BY sort_order ASC
+      `).bind(numericId).all<Photo>(),
+    ]);
+    place = placeResult ?? null;
+    photos = photosResult.results;
   }
-  return Astro.redirect('/404', 404);
-}
-
-if (db) {
+  if (!place) {
+    return Astro.redirect('/404', 404);
+  }
+} else if (db) {
   const [placeResult, photosResult] = await Promise.all([
     db.prepare(`
       SELECT p.id, p.slug, p.name, p.description, p.address,
